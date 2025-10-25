@@ -36,3 +36,6 @@ Thumbs.db
 
 # Misc
 .cache
+node_modules/
+.env
+service-account.json
