@@ -1,30 +1,32 @@
 import { motion } from 'framer-motion'
 import { ShoppingBag, Sparkles, Palette, Volume2, Star, Lock } from 'lucide-react'
 import { useState } from 'react'
-import { useAuthStore } from '../store/store'
+import { useAuthStore, useThemeStore } from '../store/store'
 import toast from 'react-hot-toast'
 
 const storeItems = [
   {
-    id: 1,
+    id: 'dark-theme',
     name: 'Dark Theme',
     icon: '🌙',
     description: 'Unlock the sleek dark mode',
     cost: 50,
     type: 'theme',
-    category: 'Themes'
+    category: 'Themes',
+    themeId: 'dark'
   },
   {
-    id: 2,
+    id: 'ocean-theme',
     name: 'Ocean Theme',
     icon: '🌊',
     description: 'Beautiful ocean-inspired colors',
     cost: 75,
     type: 'theme',
-    category: 'Themes'
+    category: 'Themes',
+    themeId: 'ocean'
   },
   {
-    id: 3,
+    id: 'ai-voice-pack',
     name: 'AI Voice Pack',
     icon: '🤖',
     description: 'Get AI coach voice guidance',
@@ -33,7 +35,7 @@ const storeItems = [
     category: 'Features'
   },
   {
-    id: 4,
+    id: 'custom-avatar',
     name: 'Custom Avatar',
     icon: '👤',
     description: 'Upload your own profile picture',
@@ -42,7 +44,7 @@ const storeItems = [
     category: 'Avatars'
   },
   {
-    id: 5,
+    id: 'pro-dashboard',
     name: 'Pro Dashboard',
     icon: '📊',
     description: 'Advanced analytics and insights',
@@ -51,7 +53,7 @@ const storeItems = [
     category: 'Features'
   },
   {
-    id: 6,
+    id: 'coding-mentor',
     name: 'Coding Mentor',
     icon: '👨‍🏫',
     description: '1 hour with a coding mentor',
@@ -60,7 +62,7 @@ const storeItems = [
     category: 'Services'
   },
   {
-    id: 7,
+    id: 'double-xp-boost',
     name: 'Double XP Boost',
     icon: '⚡',
     description: '24 hours of 2x XP earning',
@@ -69,10 +71,10 @@ const storeItems = [
     category: 'Boosts'
   },
   {
-    id: 8,
-    name: 'Certificate',
+    id: 'certificate',
+    name: 'Certificate Template Upgrade',
     icon: '🎓',
-    description: 'Custom completion certificate',
+    description: 'Premium certificate designs',
     cost: 300,
     type: 'certificate',
     category: 'Certificates'
@@ -81,6 +83,7 @@ const storeItems = [
 
 export default function Store() {
   const { user, updateUser } = useAuthStore()
+  const { theme, setTheme } = useThemeStore()
   const [filter, setFilter] = useState('all')
   const [purchased, setPurchased] = useState(user?.unlockedRewards || [])
 
@@ -94,7 +97,7 @@ export default function Store() {
       return
     }
 
-    if (purchased.includes(item.id.toString())) {
+    if (purchased.includes(item.id)) {
       toast.error('You already own this item!')
       return
     }
@@ -102,11 +105,19 @@ export default function Store() {
     // Deduct coins and add to purchased
     updateUser({
       coins: userCoins - item.cost,
-      unlockedRewards: [...purchased, item.id.toString()]
+      unlockedRewards: [...purchased, item.id]
     })
     
-    setPurchased([...purchased, item.id.toString()])
+    setPurchased([...purchased, item.id])
     toast.success(`🎉 ${item.name} purchased successfully!`)
+
+    // Auto-apply theme if it's a theme purchase
+    if (item.type === 'theme' && item.themeId) {
+      setTimeout(() => {
+        setTheme(item.themeId)
+        toast.success(`✨ ${item.name} applied!`)
+      }, 500)
+    }
   }
 
   const filteredItems = filter === 'all' 
@@ -151,8 +162,9 @@ export default function Store() {
       {/* Store Items Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredItems.map((item, index) => {
-          const isOwned = purchased.includes(item.id.toString())
+          const isOwned = purchased.includes(item.id)
           const canAfford = (user?.coins || 0) >= item.cost
+          const isActive = item.type === 'theme' && item.themeId === theme
 
           return (
             <motion.div
@@ -160,16 +172,24 @@ export default function Store() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: index * 0.05 }}
-              className={`card ${isOwned ? 'border-2 border-green-500' : ''}`}
+              className={`card ${isOwned ? 'border-2 border-green-500' : ''} ${isActive ? 'ring-2 ring-blue-500' : ''}`}
             >
               <div className="text-center mb-4">
                 <div className="text-6xl mb-2">{item.icon}</div>
-                {isOwned && (
-                  <div className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
-                    <Star className="w-4 h-4" />
-                    <span>Owned</span>
-                  </div>
-                )}
+                <div className="flex justify-center gap-2">
+                  {isOwned && (
+                    <div className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
+                      <Star className="w-4 h-4" />
+                      <span>Owned</span>
+                    </div>
+                  )}
+                  {isActive && (
+                    <div className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold">
+                      <Sparkles className="w-4 h-4" />
+                      <span>Active</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 text-center">

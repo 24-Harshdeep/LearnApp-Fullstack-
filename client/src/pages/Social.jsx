@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Trophy, Users, Zap, Clock, Star, Send, Code, Brain, Bug, Target, Timer, Award, TrendingUp, ChevronRight, Swords } from 'lucide-react'
+import { Trophy, Users, Zap, Clock, Star, Send, Code, Brain, Bug, Target, Timer, Award, TrendingUp, ChevronRight, Swords, Play, UserPlus, Crown } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import axios from 'axios'
 import { useAuthStore } from '../store/store'
 import CodeEditor from '../components/CodeEditor'
+import { useNavigate } from 'react-router-dom'
 
 const API_URL = 'http://localhost:5000/api/social'
 
 const Social = () => {
   const { user } = useAuthStore()
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('hackathon')
   const [hackathons, setHackathons] = useState([])
   const [availableBattles, setAvailableBattles] = useState([])
@@ -682,60 +684,57 @@ const Social = () => {
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl p-6 shadow-xl text-white"
+              className="bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl p-6 shadow-xl text-white cursor-pointer"
+              onClick={() => navigate('/ai-challenges')}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
               <Zap className="w-12 h-12 mb-4" />
               <h3 className="text-2xl font-bold mb-2">AI Quiz Master</h3>
               <p className="mb-6 opacity-90">
                 Dynamically generated questions from topics you're studying
               </p>
-              <motion.button
-                className="w-full bg-white text-purple-600 py-3 rounded-xl font-bold hover:bg-gray-100 transition-all"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                Start AI Quiz
-              </motion.button>
+              <div className="bg-white/20 backdrop-blur rounded-lg py-3 text-center font-bold">
+                Start AI Quiz →
+              </div>
             </motion.div>
 
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.1 }}
-              className="bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl p-6 shadow-xl text-white"
+              className="bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl p-6 shadow-xl text-white cursor-pointer"
+              onClick={() => navigate('/ai-challenges')}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
               <Target className="w-12 h-12 mb-4" />
               <h3 className="text-2xl font-bold mb-2">AI Debug Duel</h3>
               <p className="mb-6 opacity-90">
                 AI writes broken code → you fix it. Race against time!
               </p>
-              <motion.button
-                className="w-full bg-white text-orange-600 py-3 rounded-xl font-bold hover:bg-gray-100 transition-all"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                Start Debug Duel
-              </motion.button>
+              <div className="bg-white/20 backdrop-blur rounded-lg py-3 text-center font-bold">
+                Start Debug Duel →
+              </div>
             </motion.div>
 
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.2 }}
-              className="bg-gradient-to-br from-green-500 to-emerald-500 rounded-2xl p-6 shadow-xl text-white"
+              className="bg-gradient-to-br from-green-500 to-emerald-500 rounded-2xl p-6 shadow-xl text-white cursor-pointer"
+              onClick={() => navigate('/ai-challenges')}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
               <Award className="w-12 h-12 mb-4" />
               <h3 className="text-2xl font-bold mb-2">Adaptive Difficulty</h3>
               <p className="mb-6 opacity-90">
                 Games get tougher as your performance improves
               </p>
-              <motion.button
-                className="w-full bg-white text-green-600 py-3 rounded-xl font-bold hover:bg-gray-100 transition-all"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                Coming Soon
-              </motion.button>
+              <div className="bg-white/20 backdrop-blur rounded-lg py-3 text-center font-bold">
+                Generate Challenge →
+              </div>
             </motion.div>
           </div>
         )}

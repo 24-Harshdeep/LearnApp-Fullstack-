@@ -5,6 +5,75 @@ import { useAuthStore } from '../store/store'
 import { aiAPI } from '../services/api'
 import toast from 'react-hot-toast'
 
+// Helper function to format markdown-style text to HTML
+const formatMessage = (text) => {
+  if (!text) return ''
+  
+  let formatted = text
+  
+  // First, protect code blocks from further processing
+  const codeBlocks = []
+  formatted = formatted.replace(/```(\w+)?\n?([\s\S]*?)```/g, (match, lang, code) => {
+    const placeholder = `__CODEBLOCK_${codeBlocks.length}__`
+    codeBlocks.push(`<pre class="bg-gray-800 text-gray-100 p-3 rounded-lg overflow-x-auto my-2"><code class="text-sm font-mono">${escapeHtml(code.trim())}</code></pre>`)
+    return placeholder
+  })
+  
+  // Protect inline code from processing
+  const inlineCodes = []
+  formatted = formatted.replace(/`([^`]+)`/g, (match, code) => {
+    const placeholder = `__INLINECODE_${inlineCodes.length}__`
+    inlineCodes.push(`<code class="bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded text-sm font-mono text-purple-600 dark:text-purple-400">${escapeHtml(code)}</code>`)
+    return placeholder
+  })
+  
+  // Replace **bold** with <strong>
+  formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong class="font-bold text-gray-900 dark:text-white">$1</strong>')
+  
+  // Replace *italic* with <em>
+  formatted = formatted.replace(/(?<!\*)\*(?!\*)([^*]+?)(?<!\*)\*(?!\*)/g, '<em class="italic">$1</em>')
+  
+  // Format numbered lists (e.g., "1. Item" or "1.  Item")
+  formatted = formatted.replace(/^(\d+)\.\s+(.+)$/gm, '<li class="ml-4 my-1">$2</li>')
+  
+  // Format bullet points (e.g., "• Item" or "- Item")
+  formatted = formatted.replace(/^[•\-]\s+(.+)$/gm, '<li class="ml-4 my-1">$1</li>')
+  
+  // Wrap consecutive <li> tags in <ul>
+  formatted = formatted.replace(/(<li.*?<\/li>\n?)+/g, (match) => `<ul class="list-disc list-inside my-2 space-y-1 pl-2">${match}</ul>`)
+  
+  // Restore code blocks
+  codeBlocks.forEach((block, i) => {
+    formatted = formatted.replace(`__CODEBLOCK_${i}__`, block)
+  })
+  
+  // Restore inline codes
+  inlineCodes.forEach((code, i) => {
+    formatted = formatted.replace(`__INLINECODE_${i}__`, code)
+  })
+  
+  // Replace double newlines with paragraph breaks
+  formatted = formatted.replace(/\n\n/g, '<br/><br/>')
+  
+  // Replace single newlines with breaks (but not inside lists or code)
+  formatted = formatted.split('\n').map(line => {
+    if (line.includes('<li>') || line.includes('<ul>') || line.includes('</ul>') || 
+        line.includes('<pre>') || line.includes('</pre>') || line.trim() === '') {
+      return line
+    }
+    return line + '<br/>'
+  }).join('\n')
+  
+  return formatted
+}
+
+// Helper function to escape HTML entities
+const escapeHtml = (text) => {
+  const div = document.createElement('div')
+  div.textContent = text
+  return div.innerHTML
+}
+
 const AICoachChat = () => {
   const { user } = useAuthStore()
   const [isOpen, setIsOpen] = useState(false)
@@ -196,7 +265,10 @@ const AICoachChat = () => {
                       ? 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700'
                       : 'bg-blue-500 text-white'
                   }`}>
-                    <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                    <div 
+                      className="text-sm prose prose-sm dark:prose-invert max-w-none"
+                      dangerouslySetInnerHTML={{ __html: formatMessage(message.text) }}
+                    />
                     {message.isFallback && (
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         (Offline response)

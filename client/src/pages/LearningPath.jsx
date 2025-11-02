@@ -2,9 +2,9 @@ import { motion } from 'framer-motion'
 import { CheckCircle, Circle, ChevronDown, ChevronUp, BookOpen, Code, Award, Lightbulb } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { learningPathAPI, progressAPI } from '../services/api'
-import { huggingFaceAPI } from '../services/huggingFaceAPI'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
 
 const difficultyColors = {
   beginner: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
@@ -17,8 +17,6 @@ export default function LearningPath() {
   const [progress, setProgress] = useState([])
   const [loading, setLoading] = useState(true)
   const [expandedModules, setExpandedModules] = useState([])
-  const [generatedTheory, setGeneratedTheory] = useState({})
-  const [generatingLesson, setGeneratingLesson] = useState(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -28,8 +26,29 @@ export default function LearningPath() {
   const fetchModules = async () => {
     try {
       setLoading(true)
-      const modulesRes = await learningPathAPI.getAll()
-      setModules(modulesRes.data)
+      
+      // Fetch from both curriculum and learning-path APIs
+      const [curriculumRes, learningPathRes] = await Promise.all([
+        axios.get('http://localhost:5000/api/curriculum'),
+        learningPathAPI.getAll()
+      ])
+      
+      // Get curriculum data and transform to match the component's expected format
+      const curriculumData = (curriculumRes.data || []).map(curriculum => ({
+        _id: curriculum._id,
+        title: curriculum.topic,
+        description: curriculum.description,
+        difficulty: curriculum.difficulty,
+        estimatedTime: `${curriculum.estimatedHours} hours`,
+        xpReward: curriculum.totalXP,
+        topics: curriculum.tags || [],
+        subtopics: curriculum.subtopics
+      }))
+      
+      // Combine both sources
+      const allModules = [...curriculumData, ...learningPathRes.data]
+      
+      setModules(allModules)
       setProgress([]) // Initialize with empty progress for now
       setLoading(false)
     } catch (error) {
@@ -211,68 +230,188 @@ export default function LearningPath() {
                             {lessonIndex + 1}
                           </div>
                           <div className="flex-1">
-                            <h5 className="font-semibold text-gray-900 dark:text-white mb-2">
-                              {lesson.lesson_title}
+                            <h5 className="font-semibold text-gray-900 dark:text-white mb-3 text-lg">
+                              {lesson.lessonTitle || lesson.lesson_title || lesson.title}
                             </h5>
-                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                              {lesson.explanation}
-                            </p>
-                            <button
-                              className="mb-2 px-3 py-1 bg-indigo-600 text-white rounded text-xs font-semibold hover:bg-indigo-700 transition"
-                              disabled={generatingLesson === `${module._id}-${lessonIndex}`}
-                              onClick={async () => {
-                                setGeneratingLesson(`${module._id}-${lessonIndex}`)
-                                const prompt = `Generate a concise backend theory for: ${lesson.lesson_title}.`
-                                const theory = await huggingFaceAPI.generateTheory(prompt)
-                                setGeneratedTheory(prev => ({ ...prev, [`${module._id}-${lessonIndex}`]: theory }))
-                                setGeneratingLesson(null)
-                              }}
-                            >
-                              {generatingLesson === `${module._id}-${lessonIndex}` ? 'Generating...' : 'Generate Theory (AI)'}
-                            </button>
-                            {generatedTheory[`${module._id}-${lessonIndex}`] && (
-                              <div className="bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded p-2 text-xs text-indigo-800 dark:text-indigo-300 mt-2">
-                                <strong>AI Theory:</strong> {generatedTheory[`${module._id}-${lessonIndex}`]}
+                            
+                            {/* What You'll Learn Section */}
+                            {lesson.explanation && (
+                              <div className="mb-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="p-1.5 bg-blue-600 dark:bg-blue-500 rounded-lg">
+                                    <BookOpen className="w-4 h-4 text-white" />
+                                  </div>
+                                  <span className="font-bold text-base text-blue-900 dark:text-blue-100">What You'll Learn</span>
+                                </div>
+                                <div className="prose prose-sm dark:prose-invert max-w-none">
+                                  {lesson.explanation.split('\n\n').map((section, idx) => {
+                                    // Remove extra whitespace
+                                    const trimmedSection = section.trim()
+                                    
+                                    // Check if section starts with ** (heading)
+                                    const headingMatch = trimmedSection.match(/^\*\*(.+?)\*\*/)
+                                    if (headingMatch) {
+                                      const heading = headingMatch[1].trim()
+                                      // Get content after heading
+                                      const content = trimmedSection.substring(headingMatch[0].length).trim()
+                                      
+                                      // Parse bullet points if they exist
+                                      const lines = content.split('\n').filter(line => line.trim())
+                                      const hasBullets = lines.some(line => line.trim().startsWith('-'))
+                                      
+                                      return (
+                                        <div key={idx} className="mb-4">
+                                          <h6 className="font-bold text-base text-blue-800 dark:text-blue-200 mb-2.5 flex items-center gap-2">
+                                            <span className="w-1.5 h-1.5 bg-blue-600 rounded-full flex-shrink-0"></span>
+                                            {heading}
+                                          </h6>
+                                          {hasBullets ? (
+                                            <ul className="space-y-2 ml-1">
+                                              {lines.filter(line => line.trim().startsWith('-')).map((item, i) => {
+                                                const text = item.replace(/^[-•]\s*/, '').trim()
+                                                const colonMatch = text.match(/^(.+?)\s*-\s*(.+)$/)
+                                                
+                                                if (colonMatch) {
+                                                  // Format like: <html> - Root container
+                                                  return (
+                                                    <li key={i} className="flex items-start gap-2.5 text-sm">
+                                                      <span className="text-blue-600 dark:text-blue-400 mt-1 flex-shrink-0">▸</span>
+                                                      <div>
+                                                        <code className="px-1.5 py-0.5 bg-gray-800 dark:bg-gray-700 text-blue-400 dark:text-blue-300 rounded text-xs font-mono">
+                                                          {colonMatch[1].trim()}
+                                                        </code>
+                                                        <span className="text-gray-700 dark:text-gray-300 ml-2">
+                                                          {colonMatch[2].trim()}
+                                                        </span>
+                                                      </div>
+                                                    </li>
+                                                  )
+                                                } else if (text.includes(':')) {
+                                                  // Format like: Label: Description
+                                                  const [label, ...rest] = text.split(':')
+                                                  return (
+                                                    <li key={i} className="flex items-start gap-2.5 text-sm">
+                                                      <span className="text-blue-600 dark:text-blue-400 mt-1 flex-shrink-0">▸</span>
+                                                      <div>
+                                                        <strong className="text-gray-900 dark:text-gray-100 font-semibold">
+                                                          {label.trim()}:
+                                                        </strong>
+                                                        <span className="text-gray-700 dark:text-gray-300 ml-1">
+                                                          {rest.join(':').trim()}
+                                                        </span>
+                                                      </div>
+                                                    </li>
+                                                  )
+                                                } else {
+                                                  // Regular bullet point
+                                                  return (
+                                                    <li key={i} className="flex items-start gap-2.5 text-sm text-gray-700 dark:text-gray-300">
+                                                      <span className="text-blue-600 dark:text-blue-400 mt-1 flex-shrink-0">▸</span>
+                                                      <span>{text}</span>
+                                                    </li>
+                                                  )
+                                                }
+                                              })}
+                                            </ul>
+                                          ) : (
+                                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed ml-4">
+                                              {content}
+                                            </p>
+                                          )}
+                                        </div>
+                                      )
+                                    }
+                                    
+                                    // Regular paragraph (no heading)
+                                    const lines = trimmedSection.split('\n')
+                                    const hasBullets = lines.some(line => line.trim().startsWith('-'))
+                                    
+                                    if (hasBullets) {
+                                      const beforeBullets = lines.filter(line => !line.trim().startsWith('-')).join(' ').trim()
+                                      const bulletItems = lines.filter(line => line.trim().startsWith('-'))
+                                      
+                                      return (
+                                        <div key={idx} className="mb-3">
+                                          {beforeBullets && (
+                                            <p className="text-sm text-gray-700 dark:text-gray-300 mb-2 leading-relaxed">
+                                              {beforeBullets}
+                                            </p>
+                                          )}
+                                          <ul className="space-y-2 ml-1">
+                                            {bulletItems.map((item, i) => {
+                                              const text = item.replace(/^[-•]\s*/, '').trim()
+                                              return (
+                                                <li key={i} className="flex items-start gap-2.5 text-sm text-gray-700 dark:text-gray-300">
+                                                  <span className="text-blue-600 dark:text-blue-400 mt-1 flex-shrink-0">▸</span>
+                                                  <span>{text}</span>
+                                                </li>
+                                              )
+                                            })}
+                                          </ul>
+                                        </div>
+                                      )
+                                    }
+                                    
+                                    // Plain paragraph
+                                    return (
+                                      <p key={idx} className="text-sm text-gray-700 dark:text-gray-300 mb-3 leading-relaxed">
+                                        {trimmedSection}
+                                      </p>
+                                    )
+                                  })}
+                                </div>
                               </div>
                             )}
                             
+                            {/* Open in Curriculum Button */}
+                            <button
+                              className="mb-3 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition flex items-center gap-2"
+                              onClick={() => {
+                                navigate('/curriculum')
+                                toast.success(`Opening ${module.title} in Curriculum!`)
+                              }}
+                            >
+                              <BookOpen className="w-4 h-4" />
+                              Open Full Lesson in Curriculum
+                            </button>
+                            
                             {/* Code Examples Preview */}
-                            {lesson.code_examples && lesson.code_examples.length > 0 && (
+                            {(lesson.codeExamples || lesson.code_examples) && (lesson.codeExamples || lesson.code_examples).length > 0 && (
                               <div className="mb-3">
                                 <div className="flex items-center gap-2 text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">
                                   <Code className="w-3 h-3" />
-                                  {lesson.code_examples.length} Code Example{lesson.code_examples.length > 1 ? 's' : ''}
+                                  {(lesson.codeExamples || lesson.code_examples).length} Code Example{(lesson.codeExamples || lesson.code_examples).length > 1 ? 's' : ''}
                                 </div>
                                 <pre className="bg-gray-900 text-gray-100 p-3 rounded text-xs overflow-x-auto">
-                                  <code>{lesson.code_examples[0]}</code>
+                                  <code>{(lesson.codeExamples || lesson.code_examples)[0]}</code>
                                 </pre>
-                                {lesson.code_examples.length > 1 && (
+                                {(lesson.codeExamples || lesson.code_examples).length > 1 && (
                                   <div className="text-xs text-gray-500 mt-1">
-                                    + {lesson.code_examples.length - 1} more example{lesson.code_examples.length - 1 > 1 ? 's' : ''}
+                                    + {(lesson.codeExamples || lesson.code_examples).length - 1} more example{(lesson.codeExamples || lesson.code_examples).length - 1 > 1 ? 's' : ''}
                                   </div>
                                 )}
                               </div>
                             )}
 
                             {/* Practice Tasks */}
-                            {lesson.practical_tasks && lesson.practical_tasks.length > 0 && (
+                            {(lesson.practicalTasks || lesson.practical_tasks) && (lesson.practicalTasks || lesson.practical_tasks).length > 0 && (
                               <div className="mb-3">
                                 <div className="flex items-center gap-2 text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">
                                   <Award className="w-3 h-3" />
-                                  {lesson.practical_tasks.length} Practice Task{lesson.practical_tasks.length > 1 ? 's' : ''}
+                                  {(lesson.practicalTasks || lesson.practical_tasks).length} Practice Task{(lesson.practicalTasks || lesson.practical_tasks).length > 1 ? 's' : ''}
                                 </div>
                                 <div className="bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded p-2 text-xs text-indigo-800 dark:text-indigo-300">
-                                  {lesson.practical_tasks[0].task}
+                                  {(lesson.practicalTasks || lesson.practical_tasks)[0].task}
                                 </div>
                               </div>
                             )}
 
                             {/* Bonus Tips */}
-                            {lesson.bonus_tips && (
+                            {(lesson.bonusTips || lesson.bonus_tips) && (
                               <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded p-2 flex items-start gap-2">
                                 <Lightbulb className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
                                 <p className="text-xs text-yellow-800 dark:text-yellow-300">
-                                  {lesson.bonus_tips}
+                                  {lesson.bonusTips || lesson.bonus_tips}
                                 </p>
                               </div>
                             )}

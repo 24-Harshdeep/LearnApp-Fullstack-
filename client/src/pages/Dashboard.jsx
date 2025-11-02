@@ -106,7 +106,7 @@ export default function Dashboard() {
       const [modulesRes, tasksRes, progressRes] = await Promise.all([
         learningPathAPI.getAll(),
         tasksAPI.getAll(),
-        progressAPI.getUserProgress().catch(() => ({ data: [] })) // Fallback for progress
+        user?._id ? progressAPI.getUserProgress(user._id).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }) // Fallback for progress
       ])
       
       setModules(modulesRes.data || [])

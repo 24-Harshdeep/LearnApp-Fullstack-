@@ -13,6 +13,71 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Ocean Theme Variables */
+.ocean {
+  --ocean-primary: #006994;
+  --ocean-secondary: #00b4d8;
+  --ocean-accent: #90e0ef;
+  --ocean-bg: #023e8a;
+  --ocean-surface: #0077b6;
+  --ocean-text: #caf0f8;
+}
+
+.ocean body {
+  background: linear-gradient(135deg, #023e8a 0%, #0077b6 100%);
+  color: var(--ocean-text);
+}
+
+.ocean .bg-white {
+  background: linear-gradient(135deg, rgba(0, 119, 182, 0.9) 0%, rgba(0, 180, 216, 0.8) 100%) !important;
+  backdrop-filter: blur(10px);
+}
+
+.ocean .card {
+  background: linear-gradient(135deg, rgba(0, 119, 182, 0.8) 0%, rgba(0, 180, 216, 0.7) 100%) !important;
+  border: 1px solid rgba(144, 224, 239, 0.3);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  backdrop-filter: blur(10px);
+}
+
+.ocean .text-gray-900,
+.ocean .text-gray-800,
+.ocean .text-gray-700 {
+  color: var(--ocean-text) !important;
+}
+
+.ocean .bg-gray-100,
+.ocean .bg-gray-200 {
+  background: rgba(0, 180, 216, 0.3) !important;
+}
+
+.ocean .border-gray-200,
+.ocean .border-gray-300 {
+  border-color: rgba(144, 224, 239, 0.3) !important;
+}
+
+.ocean .bg-primary-600,
+.ocean .bg-blue-500 {
+  background: var(--ocean-secondary) !important;
+}
+
+.ocean .bg-primary-600:hover,
+.ocean .bg-blue-500:hover {
+  background: var(--ocean-accent) !important;
+}
+
+.ocean nav {
+  background: linear-gradient(135deg, rgba(2, 62, 138, 0.95) 0%, rgba(0, 119, 182, 0.9) 100%) !important;
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(144, 224, 239, 0.3);
+}
+
+.ocean aside {
+  background: linear-gradient(180deg, rgba(2, 62, 138, 0.95) 0%, rgba(0, 119, 182, 0.9) 100%) !important;
+  backdrop-filter: blur(10px);
+  border-right: 1px solid rgba(144, 224, 239, 0.3);
+}
+
 
 body {
   margin: 0;
@@ -81,4 +146,81 @@ body {
   .card {
     @apply bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6;
   }
+}
+
+/* AI Chat Message Formatting */
+.prose {
+  line-height: 1.6;
+  word-wrap: break-word;
+}
+
+.prose strong {
+  @apply font-bold text-gray-900 dark:text-white;
+}
+
+.prose em {
+  @apply italic;
+}
+
+.prose code {
+  @apply bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded text-sm font-mono;
+  color: #9333ea; /* Purple for inline code */
+}
+
+.dark .prose code {
+  color: #c084fc; /* Lighter purple for dark mode */
+}
+
+.prose pre {
+  @apply bg-gray-800 text-gray-100 p-3 rounded-lg overflow-x-auto my-2;
+  font-family: 'Courier New', monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.prose pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.prose ul {
+  @apply list-disc my-2 space-y-1;
+  padding-left: 1.5rem;
+}
+
+.prose ol {
+  @apply list-decimal my-2 space-y-1;
+  padding-left: 1.5rem;
+}
+
+.prose li {
+  @apply ml-2;
+  line-height: 1.6;
+}
+
+.prose p {
+  @apply my-1;
+}
+
+.prose br {
+  display: block;
+  content: "";
+  margin-top: 0.5rem;
+}
+
+.prose h1, .prose h2, .prose h3 {
+  @apply font-bold mt-3 mb-2;
+}
+
+.prose h1 {
+  @apply text-lg;
+}
+
+.prose h2 {
+  @apply text-base;
+}
+
+.prose h3 {
+  @apply text-sm;
 }

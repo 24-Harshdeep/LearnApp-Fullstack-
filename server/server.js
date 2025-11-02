@@ -11,6 +11,7 @@ import connectDB from './config/db.js'
 // Import routes AFTER dotenv is configured
 import userRoutes from './routes/userRoutes.js'
 import learningPathRoutes from './routes/learningPathRoutes.js'
+import curriculumRoutes from './routes/curriculumRoutes.js'
 import taskRoutes from './routes/taskRoutes.js'
 import progressRoutes from './routes/progressRoutes.js'
 import rewardRoutes from './routes/rewardRoutes.js'
@@ -31,6 +32,7 @@ app.use(express.urlencoded({ extended: true }))
 // Routes
 app.use('/api/users', userRoutes)
 app.use('/api/learning-path', learningPathRoutes)
+app.use('/api/curriculum', curriculumRoutes)
 app.use('/api/tasks', taskRoutes)
 app.use('/api/progress', progressRoutes)
 app.use('/api/rewards', rewardRoutes)

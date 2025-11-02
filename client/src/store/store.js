@@ -39,3 +39,35 @@ export const useAppStore = create((set) => ({
   setUserProgress: (progress) => set({ userProgress: progress }),
   setBadges: (badges) => set({ badges }),
 }))
+
+// Theme Store
+export const useThemeStore = create(
+  persist(
+    (set) => ({
+      theme: 'light', // 'light', 'dark', 'ocean'
+      
+      setTheme: (theme) => {
+        // Apply theme to document
+        document.documentElement.classList.remove('dark', 'ocean')
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark')
+        } else if (theme === 'ocean') {
+          document.documentElement.classList.add('ocean')
+        }
+        set({ theme })
+      },
+      
+      toggleDarkMode: () => set((state) => {
+        const newTheme = state.theme === 'dark' ? 'light' : 'dark'
+        document.documentElement.classList.remove('dark', 'ocean')
+        if (newTheme === 'dark') {
+          document.documentElement.classList.add('dark')
+        }
+        return { theme: newTheme }
+      }),
+    }),
+    {
+      name: 'theme-storage',
+    }
+  )
+)

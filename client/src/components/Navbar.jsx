@@ -1,6 +1,7 @@
 import { Brain, Trophy, User, Coins } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../store/store'
+import ThemeSwitcher from './ThemeSwitcher'
 
 export default function Navbar() {
   const { user } = useAuthStore()
@@ -30,6 +31,8 @@ export default function Navbar() {
                 {user?.xp || 0} XP
               </span>
             </div>
+            
+            <ThemeSwitcher />
             
             <button className="flex items-center space-x-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition">
               <User className="w-5 h-5" />

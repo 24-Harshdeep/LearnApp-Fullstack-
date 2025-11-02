@@ -41,9 +41,15 @@ const getGemini = () => {
     if (apiKey && apiKey !== 'your_gemini_api_key_here') {
       try {
         const genAI = new GoogleGenerativeAI(apiKey)
-        // Use the free tier model name
-        gemini = genAI.getGenerativeModel({ model: 'gemini-pro' })
-        console.log('✅ Gemini API initialized successfully')
+        // Use Gemini 2.0 Flash Experimental for faster real-time responses
+        gemini = genAI.getGenerativeModel({ 
+          model: 'gemini-2.0-flash-exp',
+          generationConfig: {
+            temperature: 0.7,
+            responseMimeType: "text/plain"
+          }
+        })
+        console.log('✅ Gemini 2.0 Flash API initialized successfully')
       } catch (error) {
         console.error('❌ Failed to initialize Gemini:', error.message)
         gemini = null

@@ -10,6 +10,7 @@ import Progress from './pages/Progress'
 import Rewards from './pages/Rewards'
 import Store from './pages/Store'
 import Social from './pages/Social'
+import AIChallenges from './pages/AIChallenges'
 import AICoachChat from './components/AICoachChat'
 import { useAuthStore } from './store/store'
 
@@ -45,6 +46,7 @@ function App() {
           <Route path="learning-path" element={<LearningPath />} />
           <Route path="tasks" element={<Tasks />} />
           <Route path="social" element={<Social />} />
+          <Route path="ai-challenges" element={<AIChallenges />} />
           <Route path="progress" element={<Progress />} />
           <Route path="rewards" element={<Rewards />} />
           <Route path="store" element={<Store />} />

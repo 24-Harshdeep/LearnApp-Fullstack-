@@ -4,6 +4,7 @@ import Battle from '../models/Battle.js'
 import CodeChain from '../models/CodeChain.js'
 import User from '../models/User.js'
 import OpenAI from 'openai'
+import { quizBank, getRandomQuestions } from '../data/quizBank.js'
 
 const router = express.Router()
 
@@ -634,5 +635,428 @@ async function evaluateCodeChain(codeChain) {
     }
   }
 }
+
+// ==================== AI CHALLENGES ====================
+
+// POST /api/social/ai/quiz - Generate AI Quiz
+router.post('/ai/quiz', async (req, res) => {
+  try {
+    const { topics, difficulty, questionCount } = req.body
+    const topic = Array.isArray(topics) ? topics[0] : topics
+    const diff = difficulty || 'medium'
+    const count = questionCount || 5
+    
+    console.log(`📝 Quiz requested: Topic=${topic}, Difficulty=${diff}, Count=${count}`)
+    
+    // FIRST: Try to get predefined questions immediately
+    const predefinedQuestions = getRandomQuestions(topic, diff, count)
+    
+    if (predefinedQuestions && predefinedQuestions.length > 0) {
+      console.log(`✅ Using ${predefinedQuestions.length} predefined questions for ${topic}`)
+      return res.json({
+        questions: predefinedQuestions,
+        difficulty: diff,
+        topic: [topic],
+        generated: false,
+        source: 'predefined'
+      })
+    }
+    
+    // SECOND: If no predefined questions, try AI generation
+    console.log(`🤖 No predefined questions found, trying AI generation...`)
+    
+    const { GoogleGenerativeAI } = await import('@google/generative-ai')
+    const apiKey = process.env.GEMINI_API_KEY
+    
+    if (!apiKey || apiKey === 'your_gemini_api_key_here') {
+      console.log('⚠️  No API key, using fallback questions')
+      // Ultimate fallback
+      return res.json({
+        questions: [
+          {
+            id: 1,
+            question: `What is a fundamental concept in ${topic}?`,
+            options: ["Variables", "Functions", "Objects", "All of the above"],
+            correctAnswer: "All of the above",
+            explanation: `All these concepts are fundamental to ${topic} programming.`
+          },
+          {
+            id: 2,
+            question: `Which of these is important for ${topic} developers?`,
+            options: ["Practice", "Learning", "Debugging", "All of the above"],
+            correctAnswer: "All of the above",
+            explanation: "All these skills are essential for becoming a better developer."
+          }
+        ].slice(0, count),
+        difficulty: diff,
+        topic: [topic],
+        generated: false,
+        source: 'fallback'
+      })
+    }
+    
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({ 
+      model: 'gemini-2.0-flash-exp',
+      generationConfig: {
+        temperature: 0.7,
+        responseMimeType: "application/json"
+      }
+    })
+    
+    const prompt = `Generate ${count} multiple choice quiz questions about ${topic} at ${diff} difficulty level.
+
+Return as JSON array with this exact structure:
+[
+  {
+    "id": 1,
+    "question": "Question text here?",
+    "options": ["Option A", "Option B", "Option C", "Option D"],
+    "correctAnswer": "Option A",
+    "explanation": "Brief explanation why this is correct"
+  }
+]`
+    
+    console.log('Generating quiz with AI...')
+    
+    const result = await model.generateContent(prompt)
+    const response = await result.response
+    let questions
+    
+    try {
+      let text = response.text().trim()
+      console.log('Raw AI response:', text.substring(0, 200) + '...')
+      
+      // Remove markdown code blocks if present
+      text = text.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim()
+      
+      // Try to extract JSON array if wrapped in text
+      const jsonMatch = text.match(/\[[\s\S]*\]/)
+      if (jsonMatch) {
+        text = jsonMatch[0]
+      }
+      
+      questions = JSON.parse(text)
+      
+      // Validate questions structure
+      if (!Array.isArray(questions) || questions.length === 0) {
+        throw new Error('Invalid questions array')
+      }
+      
+      // Ensure each question has required fields
+      questions = questions.map((q, idx) => ({
+        id: q.id || idx + 1,
+        question: q.question || 'Question not available',
+        options: Array.isArray(q.options) && q.options.length >= 2 ? q.options : ['Option A', 'Option B', 'Option C', 'Option D'],
+        correctAnswer: q.correctAnswer || q.options?.[0] || 'Option A',
+        explanation: q.explanation || 'Explanation not available'
+      }))
+      
+      console.log('✅ Successfully generated', questions.length, 'AI questions')
+      
+      return res.json({
+        questions,
+        difficulty: diff,
+        topic: [topic],
+        generated: true,
+        source: 'ai'
+      })
+      
+    } catch (parseError) {
+      console.error('❌ AI Parse error:', parseError.message)
+      
+      // If AI fails, try predefined questions for any similar topic
+      const fallbackTopics = ['JavaScript', 'React', 'HTML', 'CSS', 'Python', 'Node.js']
+      for (const fallbackTopic of fallbackTopics) {
+        const fallbackQuestions = getRandomQuestions(fallbackTopic, diff, count)
+        if (fallbackQuestions && fallbackQuestions.length > 0) {
+          console.log(`🔄 Using fallback ${fallbackTopic} questions`)
+          return res.json({
+            questions: fallbackQuestions,
+            difficulty: diff,
+            topic: [fallbackTopic],
+            generated: false,
+            source: 'fallback-predefined'
+          })
+        }
+      }
+      
+      // Ultimate fallback
+      return res.json({
+        questions: [
+          {
+            id: 1,
+            question: "What is an important programming concept?",
+            options: ["Variables", "Functions", "Loops", "All of the above"],
+            correctAnswer: "All of the above",
+            explanation: "All these concepts are fundamental to programming."
+          }
+        ],
+        difficulty: diff,
+        topic: [topic],
+        generated: false,
+        source: 'ultimate-fallback'
+      })
+    }
+    
+  } catch (error) {
+    console.error('❌ Quiz Generation Error:', error.message)
+    
+    // Error fallback - try predefined questions one more time
+    const { topics, difficulty, questionCount } = req.body
+    const topic = Array.isArray(topics) ? topics[0] : topics
+    const predefinedQuestions = getRandomQuestions(topic, difficulty || 'medium', questionCount || 5)
+    
+    if (predefinedQuestions && predefinedQuestions.length > 0) {
+      return res.json({
+        questions: predefinedQuestions,
+        difficulty: difficulty || 'medium',
+        topic: [topic],
+        generated: false,
+        source: 'error-fallback-predefined'
+      })
+    }
+    
+    // Final fallback response
+    res.json({
+      questions: [
+        {
+          id: 1,
+          question: "Which is a key skill for developers?",
+          options: ["Problem solving", "Continuous learning", "Practice", "All of the above"],
+          correctAnswer: "All of the above",
+          explanation: "All these skills are essential for becoming a successful developer."
+        },
+        {
+          id: 2,
+          question: "What helps improve coding skills?",
+          options: ["Daily practice", "Building projects", "Reading documentation", "All of the above"],
+          correctAnswer: "All of the above",
+          explanation: "Consistent practice, project building, and learning from docs all contribute to skill improvement."
+        }
+      ],
+      difficulty: req.body.difficulty || 'medium',
+      topic: req.body.topics || ['Programming'],
+      generated: false,
+      source: 'error-ultimate-fallback'
+    })
+  }
+})
+
+// POST /api/social/ai/debug - Generate Debug Challenge
+router.post('/ai/debug', async (req, res) => {
+  try {
+    const { topic, difficulty } = req.body
+    
+    const { GoogleGenerativeAI } = await import('@google/generative-ai')
+    const apiKey = process.env.GEMINI_API_KEY
+    
+    if (!apiKey || apiKey === 'your_gemini_api_key_here') {
+      // Fallback buggy code
+      return res.json({
+        title: "Fix the Counter Bug",
+        description: "This counter isn't incrementing properly. Find and fix the bug!",
+        buggyCode: `function Counter() {
+  const [count, setCount] = useState(0);
+  
+  function increment() {
+    count = count + 1; // Bug here!
+  }
+  
+  return <button onClick={increment}>Count: {count}</button>;
+}`,
+        hints: [
+          "Check how state is being updated",
+          "Remember: state should be immutable",
+          "Use the setState function"
+        ],
+        solution: `function Counter() {
+  const [count, setCount] = useState(0);
+  
+  function increment() {
+    setCount(count + 1); // Fixed!
+  }
+  
+  return <button onClick={increment}>Count: {count}</button>;
+}`,
+        explanation: "You must use setCount() to update state, not direct assignment.",
+        difficulty: difficulty || 'easy',
+        generated: false
+      })
+    }
+    
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' })
+    
+    const prompt = `Create a ${difficulty || 'medium'} difficulty debug challenge for ${topic || 'JavaScript/React'}.
+
+Generate buggy code with 1-2 bugs, hints, and the solution.
+
+Return ONLY valid JSON with this structure (no markdown):
+{
+  "title": "Challenge title",
+  "description": "What's wrong with this code?",
+  "buggyCode": "function example() {...}",
+  "hints": ["Hint 1", "Hint 2"],
+  "solution": "function example() {...}",
+  "explanation": "What was wrong and why",
+  "difficulty": "${difficulty || 'medium'}"
+}`
+    
+    const result = await model.generateContent(prompt)
+    const response = await result.response
+    let challenge
+    
+    try {
+      const text = response.text().trim()
+      const cleanedText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '')
+      challenge = JSON.parse(cleanedText)
+      challenge.generated = true
+    } catch (parseError) {
+      // Fallback
+      challenge = {
+        title: "Fix the Loop Bug",
+        description: "This loop isn't working as expected!",
+        buggyCode: `for (let i = 0; i <= 5; i++) {
+  console.log(i);
+  i++; // Bug!
+}`,
+        hints: ["Check the loop increment", "Are you incrementing twice?"],
+        solution: `for (let i = 0; i <= 5; i++) {
+  console.log(i);
+}`,
+        explanation: "The loop was incrementing i twice - once in the loop expression and once inside the loop body.",
+        difficulty: difficulty || 'easy',
+        generated: false
+      }
+    }
+    
+    res.json(challenge)
+    
+  } catch (error) {
+    console.error('AI Debug Challenge Error:', error.message)
+    
+    // Fallback response
+    res.json({
+      title: "Fix the Function Bug",
+      description: "This function doesn't return what it should!",
+      buggyCode: `function addNumbers(a, b) {
+  let sum = a + b;
+  // Missing return statement!
+}`,
+      hints: ["What should the function return?", "Check if there's a return statement"],
+      solution: `function addNumbers(a, b) {
+  let sum = a + b;
+  return sum;
+}`,
+      explanation: "The function was missing a return statement, so it returned undefined.",
+      difficulty: req.body.difficulty || 'easy',
+      generated: false
+    })
+  }
+})
+
+// POST /api/social/ai/adaptive - Get Adaptive Challenge
+router.post('/ai/adaptive', async (req, res) => {
+  try {
+    const { userId, userLevel, recentPerformance, weakTopics } = req.body
+    
+    const { GoogleGenerativeAI } = await import('@google/generative-ai')
+    const apiKey = process.env.GEMINI_API_KEY
+    
+    if (!apiKey || apiKey === 'your_gemini_api_key_here') {
+      // Fallback challenge
+      return res.json({
+        challenge: {
+          title: "Build a Todo List",
+          description: "Create a todo list with add, delete, and mark complete functionality",
+          difficulty: userLevel > 5 ? 'medium' : 'easy',
+          estimatedTime: "30 minutes",
+          xpReward: userLevel > 5 ? 50 : 30
+        },
+        reasoning: `Based on your level ${userLevel}, this challenge will help you practice state management and event handling.`,
+        generated: false
+      })
+    }
+    
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' })
+    
+    const performanceSummary = recentPerformance ? 
+      `Recent scores: ${recentPerformance.scores?.join(', ') || 'N/A'}` : 
+      'No recent performance data'
+    
+    const prompt = `Create an adaptive coding challenge for:
+- User Level: ${userLevel || 1}
+- ${performanceSummary}
+- Weak Topics: ${(weakTopics || []).join(', ') || 'General programming'}
+
+The challenge should be perfectly matched to their skill level - not too easy, not too hard.
+
+Return ONLY valid JSON (no markdown):
+{
+  "challenge": {
+    "title": "Challenge title",
+    "description": "What to build",
+    "difficulty": "easy|medium|hard",
+    "estimatedTime": "X minutes",
+    "xpReward": 50,
+    "requirements": ["Requirement 1", "Requirement 2"],
+    "starterCode": "// optional starter code"
+  },
+  "reasoning": "Why this challenge is perfect for this user's level"
+}`
+    
+    const result = await model.generateContent(prompt)
+    const response = await result.response
+    let adaptiveChallenge
+    
+    try {
+      const text = response.text().trim()
+      const cleanedText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '')
+      adaptiveChallenge = JSON.parse(cleanedText)
+      adaptiveChallenge.generated = true
+    } catch (parseError) {
+      adaptiveChallenge = {
+        challenge: {
+          title: "Interactive Card Component",
+          description: "Build a card that flips when clicked to reveal more information",
+          difficulty: userLevel > 5 ? 'medium' : 'easy',
+          estimatedTime: "25 minutes",
+          xpReward: userLevel > 5 ? 50 : 30,
+          requirements: [
+            "Card component with front and back",
+            "Click to flip animation",
+            "Display different content on each side"
+          ]
+        },
+        reasoning: `This challenge is tailored for level ${userLevel} and will help strengthen your component and state skills.`,
+        generated: false
+      }
+    }
+    
+    res.json(adaptiveChallenge)
+    
+  } catch (error) {
+    console.error('Adaptive Challenge Error:', error.message)
+    
+    res.json({
+      challenge: {
+        title: "Dynamic Form Builder",
+        description: "Create a form that dynamically adds input fields",
+        difficulty: req.body.userLevel > 5 ? 'medium' : 'easy',
+        estimatedTime: "30 minutes",
+        xpReward: req.body.userLevel > 5 ? 50 : 30,
+        requirements: [
+          "Add and remove form fields dynamically",
+          "Validate inputs",
+          "Submit form data"
+        ]
+      },
+      reasoning: `Based on your level ${req.body.userLevel || 1}, this will challenge you appropriately.`,
+      generated: false
+    })
+  }
+})
 
 export default router
