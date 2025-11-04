@@ -41,15 +41,15 @@ const getGemini = () => {
     if (apiKey && apiKey !== 'your_gemini_api_key_here') {
       try {
         const genAI = new GoogleGenerativeAI(apiKey)
-        // Use Gemini 2.0 Flash Experimental for faster real-time responses
+        // Use Gemini 2.5 Flash for faster real-time responses
         gemini = genAI.getGenerativeModel({ 
-          model: 'gemini-2.0-flash-exp',
+          model: 'gemini-2.5-flash',
           generationConfig: {
             temperature: 0.7,
             responseMimeType: "text/plain"
           }
         })
-        console.log('✅ Gemini 2.0 Flash API initialized successfully')
+        console.log('✅ Gemini 2.5 Flash API initialized successfully')
       } catch (error) {
         console.error('❌ Failed to initialize Gemini:', error.message)
         gemini = null
@@ -99,30 +99,58 @@ router.post('/generate-task', async (req, res) => {
       "aiGenerated": true
     }`
 
-    const completion = await getOpenAI().chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [
-        {
-          role: "system",
-          content: "You are a programming tutor creating coding tasks. Always respond with valid JSON only, no markdown formatting."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      max_tokens: 400,
-      temperature: 0.8,
-    })
+    let generatedTask = null
 
-    let generatedTask
-    try {
-      const responseText = completion.choices[0].message.content.trim()
-      // Remove markdown code blocks if present
-      const cleanedResponse = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '')
-      generatedTask = JSON.parse(cleanedResponse)
-    } catch (parseError) {
-      // Fallback if JSON parsing fails
+    // Try Gemini first
+    const geminiClient = getGemini()
+    if (geminiClient) {
+      try {
+        const result = await geminiClient.generateContent(prompt)
+        const response = await result.response
+        const responseText = response.text().trim()
+        
+        // Remove markdown code blocks if present
+        const cleanedResponse = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '')
+        generatedTask = JSON.parse(cleanedResponse)
+        console.log('✅ Gemini task generation successful')
+      } catch (geminiError) {
+        console.log('⚠️ Gemini failed, trying OpenAI:', geminiError.message)
+      }
+    }
+
+    // Try OpenAI if Gemini failed
+    if (!generatedTask) {
+      const openaiClient = getOpenAI()
+      if (openaiClient) {
+        try {
+          const completion = await openaiClient.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+              {
+                role: "system",
+                content: "You are a programming tutor creating coding tasks. Always respond with valid JSON only, no markdown formatting."
+              },
+              {
+                role: "user",
+                content: prompt
+              }
+            ],
+            max_tokens: 400,
+            temperature: 0.8,
+          })
+
+          const responseText = completion.choices[0].message.content.trim()
+          const cleanedResponse = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '')
+          generatedTask = JSON.parse(cleanedResponse)
+          console.log('✅ OpenAI task generation successful')
+        } catch (openaiError) {
+          console.log('⚠️ OpenAI also failed:', openaiError.message)
+        }
+      }
+    }
+
+    // Use fallback if both failed
+    if (!generatedTask) {
       generatedTask = {
         title: `Build a ${topic} Component`,
         description: `Create a functional ${topic} component with ${difficulty} level complexity`,
@@ -170,27 +198,54 @@ router.post('/recommend', async (req, res) => {
       })
     }
 
-    const completion = await getOpenAI().chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [
-        {
-          role: "system",
-          content: "You are IdleLearn AI Coach. Provide personalized learning recommendations based on the user's progress. Be encouraging and specific."
-        },
-        {
-          role: "user",
-          content: `User is at level ${currentLevel}, has completed: ${completedTopics?.join(', ') || 'no topics yet'}. Weak areas: ${weakAreas?.join(', ') || 'none identified'}. Recommend the next topic to study and why.`
-        }
-      ],
-      max_tokens: 200,
-      temperature: 0.7,
-    })
+    const prompt = `User is at level ${currentLevel}, has completed: ${completedTopics?.join(', ') || 'no topics yet'}. Weak areas: ${weakAreas?.join(', ') || 'none identified'}. Recommend the next topic to study and why. Be encouraging and specific.`
 
-    const aiResponse = completion.choices[0].message.content
+    let aiResponse = null
+
+    // Try Gemini first
+    const geminiClient = getGemini()
+    if (geminiClient) {
+      try {
+        const result = await geminiClient.generateContent(prompt)
+        const response = await result.response
+        aiResponse = response.text()
+        console.log('✅ Gemini recommendation successful')
+      } catch (geminiError) {
+        console.log('⚠️ Gemini failed, trying OpenAI:', geminiError.message)
+      }
+    }
+
+    // Try OpenAI if Gemini failed
+    if (!aiResponse) {
+      const openaiClient = getOpenAI()
+      if (openaiClient) {
+        try {
+          const completion = await openaiClient.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+              {
+                role: "system",
+                content: "You are IdleLearn AI Coach. Provide personalized learning recommendations based on the user's progress. Be encouraging and specific."
+              },
+              {
+                role: "user",
+                content: prompt
+              }
+            ],
+            max_tokens: 200,
+            temperature: 0.7,
+          })
+          aiResponse = completion.choices[0].message.content
+          console.log('✅ OpenAI recommendation successful')
+        } catch (openaiError) {
+          console.log('⚠️ OpenAI also failed:', openaiError.message)
+        }
+      }
+    }
 
     res.json({
       nextTopic: 'React Hooks',
-      reason: aiResponse,
+      reason: aiResponse || 'Based on your progress, learning Hooks will help you write cleaner components',
       suggestedTasks: [
         { title: 'Build a Counter with useState', difficulty: 'easy' },
         { title: 'Fetch Data with useEffect', difficulty: 'medium' }
@@ -227,25 +282,63 @@ router.post('/hint', async (req, res) => {
       })
     }
 
-    const completion = await getOpenAI().chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [
-        {
-          role: "system",
-          content: `You are an AI programming tutor. Provide a ${hintLevel} hint without giving away the full solution. Be encouraging.`
-        },
-        {
-          role: "user",
-          content: `Task: ${taskTitle}\nDescription: ${taskDescription}\nUser's attempt ${attemptNumber}.\n\nUser's code:\n${userCode || 'No code yet'}\n\nProvide a helpful hint.`
+    const prompt = `You are an AI programming tutor. Provide a ${hintLevel} hint without giving away the full solution. Be encouraging.
+
+Task: ${taskTitle}
+Description: ${taskDescription}
+User's attempt ${attemptNumber}.
+
+User's code:
+${userCode || 'No code yet'}
+
+Provide a helpful hint.`
+
+    let hintMessage = null
+
+    // Try Gemini first
+    const geminiClient = getGemini()
+    if (geminiClient) {
+      try {
+        const result = await geminiClient.generateContent(prompt)
+        const response = await result.response
+        hintMessage = response.text()
+        console.log('✅ Gemini hint generation successful')
+      } catch (geminiError) {
+        console.log('⚠️ Gemini failed, trying OpenAI:', geminiError.message)
+      }
+    }
+
+    // Try OpenAI if Gemini failed
+    if (!hintMessage) {
+      const openaiClient = getOpenAI()
+      if (openaiClient) {
+        try {
+          const completion = await openaiClient.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+              {
+                role: "system",
+                content: `You are an AI programming tutor. Provide a ${hintLevel} hint without giving away the full solution. Be encouraging.`
+              },
+              {
+                role: "user",
+                content: `Task: ${taskTitle}\nDescription: ${taskDescription}\nUser's attempt ${attemptNumber}.\n\nUser's code:\n${userCode || 'No code yet'}\n\nProvide a helpful hint.`
+              }
+            ],
+            max_tokens: 150,
+            temperature: 0.7,
+          })
+          hintMessage = completion.choices[0].message.content
+          console.log('✅ OpenAI hint generation successful')
+        } catch (openaiError) {
+          console.log('⚠️ OpenAI also failed:', openaiError.message)
         }
-      ],
-      max_tokens: 150,
-      temperature: 0.7,
-    })
+      }
+    }
 
     const hint = {
       level: attemptNumber <= 2 ? 'gentle' : 'detailed',
-      message: completion.choices[0].message.content,
+      message: hintMessage || '💡 Try breaking down the problem into smaller steps. Start with the basic structure first, then add functionality piece by piece.',
       codeExample: attemptNumber > 3 ? '// Consider this pattern: function example() { return result; }' : null
     }
 
@@ -427,24 +520,60 @@ router.post('/feedback', async (req, res) => {
       })
     }
 
-    const completion = await getOpenAI().chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [
-        {
-          role: "system",
-          content: "You are an AI code reviewer. Provide constructive feedback on: correctness, best practices, and improvements. Be encouraging and specific."
-        },
-        {
-          role: "user",
-          content: `Task: ${task}\n\nUser's code:\n${code}\n\nProvide helpful feedback.`
+    const prompt = `You are an AI code reviewer. Provide constructive feedback on: correctness, best practices, and improvements. Be encouraging and specific.
+
+Task: ${task}
+
+User's code:
+${code}
+
+Provide helpful feedback.`
+
+    let feedback = null
+
+    // Try Gemini first
+    const geminiClient = getGemini()
+    if (geminiClient) {
+      try {
+        const result = await geminiClient.generateContent(prompt)
+        const response = await result.response
+        feedback = response.text()
+        console.log('✅ Gemini feedback generation successful')
+      } catch (geminiError) {
+        console.log('⚠️ Gemini failed, trying OpenAI:', geminiError.message)
+      }
+    }
+
+    // Try OpenAI if Gemini failed
+    if (!feedback) {
+      const openaiClient = getOpenAI()
+      if (openaiClient) {
+        try {
+          const completion = await openaiClient.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+              {
+                role: "system",
+                content: "You are an AI code reviewer. Provide constructive feedback on: correctness, best practices, and improvements. Be encouraging and specific."
+              },
+              {
+                role: "user",
+                content: `Task: ${task}\n\nUser's code:\n${code}\n\nProvide helpful feedback.`
+              }
+            ],
+            max_tokens: 250,
+            temperature: 0.7,
+          })
+          feedback = completion.choices[0].message.content
+          console.log('✅ OpenAI feedback generation successful')
+        } catch (openaiError) {
+          console.log('⚠️ OpenAI also failed:', openaiError.message)
         }
-      ],
-      max_tokens: 250,
-      temperature: 0.7,
-    })
+      }
+    }
 
     res.json({
-      feedback: completion.choices[0].message.content,
+      feedback: feedback || "Great effort on your code! 🌟 Focus on code readability and consider edge cases. Keep practicing - you're doing well!",
       timestamp: new Date()
     })
 
