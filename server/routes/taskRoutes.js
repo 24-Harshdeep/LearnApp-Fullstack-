@@ -18,6 +18,33 @@ router.get('/', async (req, res) => {
 
     // If Authorization header is present, try to mark tasks as completed for the user
     try {
+      // Allow a dev-friendly userId query param as a fallback when tokens
+      // cannot be verified (helps local dev when JWT secrets differ).
+      // Example: GET /tasks?userId=69060196f24b0c25a100db7c
+      const userIdFromQuery = req.query.userId
+      if (userIdFromQuery) {
+        try {
+          const user = await User.findById(userIdFromQuery).select('completedTasks submissions')
+          if (user) {
+            const completedSet = new Set((user.completedTasks || []).map(String))
+            const submissionMap = new Map((user.submissions || []).map(s => [String(s.taskId), s]))
+            const tasksWithStatus = tasks.map(t => {
+              const tid = String(t._id)
+              const entry = submissionMap.get(tid)
+              return {
+                ...t.toObject(),
+                completed: completedSet.has(tid),
+                submittedCode: entry?.code || null,
+                submittedAt: entry?.submittedAt || null
+              }
+            })
+            return res.json(tasksWithStatus)
+          }
+        } catch (e) {
+          console.debug('[tasks] fallback userId lookup failed:', e.message)
+        }
+      }
+
       const authHeader = req.headers.authorization || ''
       const token = authHeader.split(' ')[1]
       const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
