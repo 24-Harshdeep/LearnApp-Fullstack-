@@ -13,6 +13,10 @@ import Social from './pages/Social'
 import AIChallenges from './pages/AIChallenges'
 import AICoachChat from './components/AICoachChat'
 import { useAuthStore } from './store/store'
+// LMS Pages
+import LMSLogin from './pages/LMSLogin'
+import TeacherDashboard from './pages/TeacherDashboard'
+import StudentDashboard from './pages/StudentDashboard'
 
 function App() {
   const { setAuth } = useAuthStore()
@@ -51,6 +55,10 @@ function App() {
           <Route path="rewards" element={<Rewards />} />
           <Route path="store" element={<Store />} />
         </Route>
+        {/* LMS Routes - separate from main layout */}
+        <Route path="/lms/login" element={<LMSLogin />} />
+        <Route path="/lms/teacher" element={<TeacherDashboard />} />
+        <Route path="/lms/student" element={<StudentDashboard />} />
       </Routes>
     </Router>
   )

@@ -17,12 +17,21 @@ import progressRoutes from './routes/progressRoutes.js'
 import rewardRoutes from './routes/rewardRoutes.js'
 import aiRoutes from './routes/aiRoutes.js'
 import socialRoutes from './routes/socialRoutes.js'
+// LMS routes
+import lmsAuthRoutes from './routes/lmsAuthRoutes.js'
+import lmsClassRoutes from './routes/lmsClassRoutes.js'
+import lmsAssignmentRoutes from './routes/lmsAssignmentRoutes.js'
+import lmsSubmissionRoutes from './routes/lmsSubmissionRoutes.js'
+import { initializeFirebaseAdmin } from './config/firebase.js'
 
 // Initialize express app
 const app = express()
 
 // Connect to MongoDB
 connectDB()
+
+// Initialize Firebase Admin (optional for development)
+initializeFirebaseAdmin()
 
 // Middleware
 app.use(cors())
@@ -38,6 +47,11 @@ app.use('/api/progress', progressRoutes)
 app.use('/api/rewards', rewardRoutes)
 app.use('/api/ai', aiRoutes)
 app.use('/api/social', socialRoutes)
+// LMS routes
+app.use('/api/lms/auth', lmsAuthRoutes)
+app.use('/api/lms/classes', lmsClassRoutes)
+app.use('/api/lms/assignments', lmsAssignmentRoutes)
+app.use('/api/lms/submissions', lmsSubmissionRoutes)
 
 // Health check route
 app.get('/api/health', (req, res) => {

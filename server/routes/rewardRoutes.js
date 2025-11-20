@@ -1,5 +1,7 @@
 import express from 'express'
 import User from '../models/User.js'
+import LMSUser from '../models/LMSUser.js'
+import { protect, isTeacher } from '../middleware/lmsAuth.js'
 
 const router = express.Router()
 
@@ -13,6 +15,32 @@ router.get('/badges/:userId', async (req, res) => {
     res.json({ badges: user.badges })
   } catch (error) {
     res.status(500).json({ message: error.message })
+  }
+})
+
+// Get badges for current authenticated user or by query params
+// GET /api/rewards/badges?userId=... or ?email=...
+router.get('/badges', async (req, res) => {
+  try {
+    const { userId, email } = req.query
+
+    let user = null
+    if (userId) {
+      user = await User.findById(userId).select('badges')
+    } else if (email) {
+      user = await User.findOne({ email }).select('badges')
+    } else if (req.user && req.user._id) {
+      // If route is called with authentication middleware applied, use req.user
+      user = await User.findById(req.user._id).select('badges')
+    }
+
+    if (!user) {
+      return res.status(400).json({ message: 'Provide userId or email query param, or call with authentication' })
+    }
+
+    return res.json({ badges: user.badges })
+  } catch (error) {
+    return res.status(500).json({ message: error.message })
   }
 })
 
@@ -78,6 +106,74 @@ router.post('/unlock/:userId', async (req, res) => {
     res.json({ message: 'Reward unlocked', unlockedRewards: user.unlockedRewards })
   } catch (error) {
     res.status(500).json({ message: error.message })
+  }
+})
+
+/**
+ * POST /api/rewards/award
+ * Award points/coins to a student. Body: { studentId, teacherId?, points, reason?, timestamp? }
+ */
+router.post('/award', protect, isTeacher, async (req, res) => {
+  try {
+    // Defense-in-depth: ensure authenticated user is a teacher
+    if (!req.user || req.user.role !== 'teacher') {
+      return res.status(403).json({ success: false, message: 'Access denied. Teacher role required.' })
+    }
+    const { studentId, studentEmail, teacherId, points, reason, timestamp } = req.body
+
+    const pts = parseInt(points, 10)
+    if ((!studentId && !studentEmail) || !pts || pts <= 0) {
+      return res.status(400).json({ success: false, message: 'studentId or studentEmail and positive points are required' })
+    }
+
+    // If teacherId provided, ensure it matches the authenticated teacher
+    if (teacherId && String(teacherId) !== String(req.user._id)) {
+      console.warn(`Teacher ID mismatch: body=${teacherId} auth=${req.user._id}`)
+      return res.status(403).json({ success: false, message: 'Teacher authorization mismatch' })
+    }
+
+    // Find LMS user (student) and increment their points (teacher-facing ledger)
+    let lmsStudent = null
+    if (studentId) {
+      lmsStudent = await LMSUser.findByIdAndUpdate(studentId, { $inc: { points: pts } }, { new: true })
+    }
+    // If not found by id, try by email (leaderboard may hold canonical User ids)
+    if (!lmsStudent && studentEmail) {
+      lmsStudent = await LMSUser.findOneAndUpdate({ email: studentEmail }, { $inc: { points: pts } }, { new: true })
+    }
+
+    if (!lmsStudent) {
+      return res.status(404).json({ success: false, message: 'Student not found' })
+    }
+
+    // Update regular User coins and optionally XP
+    const user = await User.findOneAndUpdate(
+      { email: lmsStudent.email },
+      { $inc: { coins: pts, xp: pts } },
+      { new: true }
+    )
+
+    if (user) {
+      // Recalculate level from xp
+      try { user.calculateLevel(); await user.save(); } catch (e) { /* ignore */ }
+    }
+
+    // Log the award (server-side) for debugging
+    console.log(`Awarded ${pts} points to ${lmsStudent.email} by teacher ${req.user.email} - reason: ${reason || 'n/a'} at ${timestamp || new Date().toISOString()}`)
+
+    return res.json({
+      success: true,
+      message: `Awarded ${pts} points to ${lmsStudent.name}`,
+      student: {
+        _id: lmsStudent._id,
+        name: lmsStudent.name,
+        points: lmsStudent.points
+      },
+      user: user ? { _id: user._id, coins: user.coins, xp: user.xp, level: user.level } : null
+    })
+  } catch (error) {
+    console.error('Error in /api/rewards/award:', error)
+    return res.status(500).json({ success: false, message: 'Failed to award points', error: error.message })
   }
 })
 
