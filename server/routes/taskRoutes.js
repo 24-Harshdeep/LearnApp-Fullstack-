@@ -22,16 +22,26 @@ router.get('/', async (req, res) => {
       const token = authHeader.split(' ')[1]
       const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
       if (token) {
-        const decoded = jwt.verify(token, JWT_SECRET)
-        const user = await User.findById(decoded.userId).select('completedTasks')
-        if (user) {
-          const completedSet = new Set((user.completedTasks || []).map(String))
-          const tasksWithStatus = tasks.map(t => ({ ...t.toObject(), completed: completedSet.has(String(t._id)) }))
-          return res.json(tasksWithStatus)
+        try {
+          const decoded = jwt.verify(token, JWT_SECRET)
+          console.debug('[tasks] token verified for userId:', decoded.userId)
+          const user = await User.findById(decoded.userId).select('completedTasks')
+          if (user) {
+            const completedSet = new Set((user.completedTasks || []).map(String))
+            const tasksWithStatus = tasks.map(t => ({ ...t.toObject(), completed: completedSet.has(String(t._id)) }))
+            return res.json(tasksWithStatus)
+          }
+        } catch (verifyErr) {
+          // Log verification issues to help debug client/server token problems
+          console.debug('[tasks] token present but verification failed:', verifyErr.message)
+          // fallthrough to return plain tasks
         }
+      } else {
+        console.debug('[tasks] no Authorization header present')
       }
     } catch (e) {
-      // ignore token errors and return plain tasks
+      console.error('[tasks] unexpected error while checking token:', e.message)
+      // ignore and return plain tasks
     }
 
     res.json(tasks)
