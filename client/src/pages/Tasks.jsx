@@ -56,9 +56,17 @@ export default function Tasks() {
       // Try to include Authorization header explicitly to ensure the server
       // can verify the token and annotate tasks with completed:true.
       const token = localStorage.getItem('lms_token') || localStorage.getItem('token')
+      // Also try to include a userId query param (fallback for local dev when JWT
+      // verification fails due to secret mismatches). getCurrentUser() parses
+      // localStorage.lms_user or other shapes and returns an object with _id/email.
+      const currentUser = getCurrentUser()
+      const userId = currentUser?._id || currentUser?.user?._id || null
       let response
       if (token) {
-        response = await api.get('/tasks', { headers: { Authorization: `Bearer ${token}` } })
+        response = await api.get('/tasks', { headers: { Authorization: `Bearer ${token}` }, params: userId ? { userId } : {} })
+      } else if (userId) {
+        // No token but we have a stored user id — use query fallback
+        response = await api.get('/tasks', { params: { userId } })
       } else {
         // Fallback to tasksAPI which relies on the interceptor
         response = await tasksAPI.getAll()
