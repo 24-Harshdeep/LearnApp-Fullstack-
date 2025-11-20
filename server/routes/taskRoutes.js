@@ -25,10 +25,20 @@ router.get('/', async (req, res) => {
         try {
           const decoded = jwt.verify(token, JWT_SECRET)
           console.debug('[tasks] token verified for userId:', decoded.userId)
-          const user = await User.findById(decoded.userId).select('completedTasks')
+          const user = await User.findById(decoded.userId).select('completedTasks submissions')
           if (user) {
             const completedSet = new Set((user.completedTasks || []).map(String))
-            const tasksWithStatus = tasks.map(t => ({ ...t.toObject(), completed: completedSet.has(String(t._id)) }))
+            const submissionMap = new Map((user.submissions || []).map(s => [String(s.taskId), s]))
+            const tasksWithStatus = tasks.map(t => {
+              const tid = String(t._id)
+              const entry = submissionMap.get(tid)
+              return {
+                ...t.toObject(),
+                completed: completedSet.has(tid),
+                submittedCode: entry?.code || null,
+                submittedAt: entry?.submittedAt || null
+              }
+            })
             return res.json(tasksWithStatus)
           }
         } catch (verifyErr) {
@@ -151,16 +161,29 @@ router.post('/:id/submit', async (req, res) => {
     user.calculateLevel()
     await user.save()
 
-    // Persist task completion for this user (idempotent)
+    // Persist task completion and submission for this user (idempotent)
     try {
       if (!user.completedTasks) user.completedTasks = []
+      if (!user.submissions) user.submissions = []
       const tid = String(task._id)
+
+      // Add to completedTasks if not present
       if (!user.completedTasks.map(String).includes(tid)) {
         user.completedTasks.push(tid)
-        await user.save()
       }
+
+      // Save or update submission entry
+      const existingIndex = user.submissions.map(s => String(s.taskId)).indexOf(tid)
+      if (existingIndex >= 0) {
+        user.submissions[existingIndex].code = code
+        user.submissions[existingIndex].submittedAt = new Date()
+      } else {
+        user.submissions.push({ taskId: tid, code, submittedAt: new Date() })
+      }
+
+      await user.save()
     } catch (e) {
-      console.error('Failed to persist completed task for user:', e.message)
+      console.error('Failed to persist completed task or submission for user:', e.message)
     }
 
     console.log('✅ Task submitted successfully:', { 

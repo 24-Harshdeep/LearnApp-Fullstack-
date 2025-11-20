@@ -86,6 +86,12 @@ const userSchema = new mongoose.Schema({
   completedTasks: [{
     type: String
   }],
+  // Store per-task submissions (so users can view their submitted code later)
+  submissions: [{
+    taskId: String,
+    code: String,
+    submittedAt: { type: Date, default: Date.now }
+  }],
   lastActive: {
     type: Date,
     default: Date.now
