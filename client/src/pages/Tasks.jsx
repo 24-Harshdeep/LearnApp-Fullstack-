@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { Code, CheckCircle, Clock, Zap, ArrowLeft, Send, Play } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { tasksAPI, aiAPI } from '../services/api'
+import api, { tasksAPI, aiAPI } from '../services/api'
 import toast from 'react-hot-toast'
 import CodeEditor from '../components/CodeEditor'
 import { useAuthStore, useAppStore } from '../store/store'
@@ -53,7 +53,16 @@ export default function Tasks() {
   const fetchTasks = async () => {
     try {
       setLoading(true)
-      const response = await tasksAPI.getAll()
+      // Try to include Authorization header explicitly to ensure the server
+      // can verify the token and annotate tasks with completed:true.
+      const token = localStorage.getItem('lms_token') || localStorage.getItem('token')
+      let response
+      if (token) {
+        response = await api.get('/tasks', { headers: { Authorization: `Bearer ${token}` } })
+      } else {
+        // Fallback to tasksAPI which relies on the interceptor
+        response = await tasksAPI.getAll()
+      }
       setTasks(response.data)
     } catch (error) {
       console.error('Error fetching tasks:', error)
