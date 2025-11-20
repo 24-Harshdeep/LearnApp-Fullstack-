@@ -12,7 +12,7 @@ import Certificate from '../components/Certificate'
 import toast from 'react-hot-toast'
 
 const Curriculum = () => {
-  const { user } = useAuthStore()
+  const { user, updateUser } = useAuthStore()
   const [curriculums, setCurriculums] = useState([])
   const [selectedCurriculum, setSelectedCurriculum] = useState(null)
   const [currentLessonIndex, setCurrentLessonIndex] = useState(0)
@@ -94,11 +94,90 @@ const Curriculum = () => {
     }
   }
 
-  const handleCompleteLesson = () => {
+  const handleCompleteLesson = async () => {
     const lessonId = `${selectedCurriculum._id}-${currentLessonIndex}`
     if (!completedLessons.includes(lessonId)) {
       setCompletedLessons([...completedLessons, lessonId])
-      // Here you can also send to backend to track progress
+      
+      // Sync progress to backend
+      try {
+        const token = localStorage.getItem('token') || localStorage.getItem('lms_token')
+        const userEmail = user?.email
+        
+        console.log('🔍 Syncing progress to backend:', {
+          email: userEmail,
+          topic: selectedCurriculum.topic || selectedCurriculum.title,
+          lessonIndex: currentLessonIndex,
+          hasToken: !!token
+        })
+        
+        if (token && userEmail) {
+          const response = await axios.post('http://localhost:5000/api/curriculum/sync-progress', {
+            email: userEmail,
+            curriculumId: selectedCurriculum._id,
+            topic: selectedCurriculum.topic || selectedCurriculum.title,
+            lessonIndex: currentLessonIndex,
+            lessonId: lessonId
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          
+          console.log('✅ Progress synced to backend:', response.data)
+          
+          // Award 10 XP for completing the lesson
+          try {
+            // Use email to find user (works with both User and LMSUser models)
+            const xpResponse = await axios.post(
+              'http://localhost:5000/api/users/award-xp',
+              { 
+                email: userEmail,
+                xpToAdd: 10,
+                reason: 'Completed lesson'
+              },
+              { headers: { Authorization: `Bearer ${token}` } }
+            )
+            
+            console.log('🎁 XP awarded:', xpResponse.data)
+            toast.success('🎁 +10 XP earned!', { duration: 2000 })
+          } catch (xpError) {
+            console.error('⚠️ Failed to award XP:', xpError)
+          }
+          
+          // Show progress update toast
+          if (response.data.totalProgress) {
+            toast.success(`📊 Progress: ${response.data.totalProgress}% complete in ${response.data.topicKey || 'this course'}`, {
+              duration: 3000
+            })
+          }
+          
+          // Force refresh user profile data immediately
+          if (token) {
+            try {
+              const profileResponse = await axios.get('http://localhost:5000/api/users/me', {
+                headers: { Authorization: `Bearer ${token}` }
+              })
+              if (profileResponse.data.success) {
+                console.log('🔄 Profile refreshed immediately after sync:', profileResponse.data.user.progress)
+                updateUser(profileResponse.data.user)
+                localStorage.setItem('lms_user', JSON.stringify(profileResponse.data.user))
+              }
+            } catch (profileError) {
+              console.error('⚠️ Failed to refresh profile:', profileError)
+            }
+          }
+        } else {
+          console.warn('⚠️ Cannot sync progress - Missing token or email:', {
+            hasToken: !!token,
+            hasEmail: !!userEmail
+          })
+        }
+      } catch (error) {
+        console.error('❌ Failed to sync progress:', error)
+        if (error.response) {
+          console.error('Error response:', error.response.data)
+        }
+        toast.error('Failed to sync progress to server. Your local progress is saved.')
+      }
     }
 
     // Check if this is the last lesson and section is completed

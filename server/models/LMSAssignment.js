@@ -14,6 +14,14 @@ const lmsAssignmentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  attachmentLink: {
+    type: String,
+    default: ''
+  },
+  attachmentFile: {
+    type: String,
+    default: ''
+  },
   dueDate: {
     type: Date,
     required: true
@@ -21,6 +29,11 @@ const lmsAssignmentSchema = new mongoose.Schema({
   maxPoints: {
     type: Number,
     default: 100
+  },
+  status: {
+    type: String,
+    enum: ['active', 'archived'],
+    default: 'active'
   },
   submissions: [{
     type: mongoose.Schema.Types.ObjectId,

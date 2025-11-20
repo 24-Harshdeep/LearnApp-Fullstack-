@@ -13,12 +13,49 @@ const api = axios.create({
 
 // Add token to requests if available
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
+  // Try regular token first
+  let token = localStorage.getItem('token')
+  
+  // If no regular token, try LMS token
+  if (!token) {
+    token = localStorage.getItem('lms_token')
+  }
+  
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
   return config
+}, (error) => {
+  return Promise.reject(error)
 })
+
+// Add response interceptor for error handling
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Handle HTML error pages (Unexpected token '<')
+    if (error.response && error.response.headers['content-type']?.includes('text/html')) {
+      console.error('❌ Received HTML instead of JSON:', error.response.config.url)
+      return Promise.reject({
+        response: {
+          data: { message: 'Server error: Received HTML instead of JSON. Please check the API endpoint.' }
+        }
+      })
+    }
+    
+    // Handle network errors
+    if (!error.response) {
+      console.error('❌ Network error:', error.message)
+      return Promise.reject({
+        response: {
+          data: { message: 'Network error. Please check your connection.' }
+        }
+      })
+    }
+    
+    return Promise.reject(error)
+  }
+)
 
 // User API
 export const userAPI = {
@@ -40,7 +77,14 @@ export const tasksAPI = {
   getAll: (params) => api.get('/tasks', { params }),
   getById: (id) => api.get(`/tasks/${id}`),
   create: (data) => api.post('/tasks', data),
-  getHints: (id) => api.get(`/tasks/${id}/hints`)
+  getHints: (id) => api.get(`/tasks/${id}/hints`),
+  // submit can be called as submit(id, { userId, email, code }) or submit(id, userId, code)
+  submit: (id, arg1, arg2) => {
+    if (typeof arg1 === 'object') {
+      return api.post(`/tasks/${id}/submit`, arg1)
+    }
+    return api.post(`/tasks/${id}/submit`, { userId: arg1, code: arg2 })
+  }
 }
 
 // Progress API

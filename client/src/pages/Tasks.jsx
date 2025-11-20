@@ -1,9 +1,10 @@
 import { motion, AnimatePresence } from 'framer-motion'
-import { Code, CheckCircle, Clock, Zap, ArrowLeft, Send, Lightbulb } from 'lucide-react'
+import { Code, CheckCircle, Clock, Zap, ArrowLeft, Send, Play } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { tasksAPI, aiAPI } from '../services/api'
 import toast from 'react-hot-toast'
 import CodeEditor from '../components/CodeEditor'
+import { useAuthStore, useAppStore } from '../store/store'
 
 export default function Tasks() {
   const [filter, setFilter] = useState('all')
@@ -11,6 +12,39 @@ export default function Tasks() {
   const [loading, setLoading] = useState(true)
   const [activeTask, setActiveTask] = useState(null)
   const [userCode, setUserCode] = useState('')
+  const [codeOutput, setCodeOutput] = useState('')
+  const [isRunning, setIsRunning] = useState(false)
+  const { user: authUser, incrementXP } = useAuthStore()
+  const { refreshLeaderboard } = useAppStore()
+
+  // Get user from either regular auth or LMS auth
+  const getCurrentUser = () => {
+    // Try regular auth first
+    if (authUser && (authUser._id || authUser.email)) {
+      return authUser
+    }
+
+    // Try LMS auth (handle multiple shapes)
+    const lmsUserStr = localStorage.getItem('lms_user') || localStorage.getItem('user') || localStorage.getItem('user_data')
+    if (lmsUserStr) {
+      try {
+        const parsed = JSON.parse(lmsUserStr)
+        // possible shapes: { _id, email, name }, { user: { _id, email } }, or simple { email }
+        if (parsed.user) return { ...parsed.user, ...parsed }
+        if (parsed._id || parsed.email) return parsed
+      } catch (e) {
+        // sometimes lms_user may just be a plain id string
+        if (typeof lmsUserStr === 'string' && lmsUserStr.length > 10) {
+          return { _id: lmsUserStr }
+        }
+        console.error('Error parsing LMS user:', e)
+      }
+    }
+
+    return null
+  }
+
+  const user = getCurrentUser()
 
   useEffect(() => {
     fetchTasks()
@@ -49,13 +83,67 @@ export default function Tasks() {
 
   const handleStartTask = (task) => {
     setActiveTask(task)
-    setUserCode(task.starterCode || '// Your code here')
+    // If the user has previously submitted code for this task, show it;
+    // otherwise show starter code placeholder.
+    setUserCode(task.submittedCode || task.starterCode || '// Your code here')
+    setCodeOutput('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleBackToList = () => {
     setActiveTask(null)
     setUserCode('')
+    setCodeOutput('')
+  }
+
+  const handleRunCode = () => {
+    setIsRunning(true)
+    setCodeOutput('')
+    
+    try {
+      // Detect task type based on code content or topic
+      const isHTML = userCode.includes('<html') || userCode.includes('<!DOCTYPE') || 
+                     activeTask?.topic?.toLowerCase().includes('html')
+      const hasCSS = userCode.includes('<style') || userCode.includes('css')
+      
+      if (isHTML || hasCSS) {
+        // For HTML/CSS tasks, render in preview
+        setCodeOutput('HTML_PREVIEW')
+        toast.success('Preview updated!')
+      } else {
+        // For JavaScript tasks, execute code
+        const logs = []
+        const customConsole = {
+          log: (...args) => logs.push(args.join(' ')),
+          error: (...args) => logs.push('ERROR: ' + args.join(' ')),
+          warn: (...args) => logs.push('WARNING: ' + args.join(' '))
+        }
+        
+        // Execute code in isolated scope
+        const wrappedCode = `
+          (function() {
+            const console = arguments[0]
+            try {
+              ${userCode}
+            } catch (error) {
+              console.error(error.message)
+            }
+          })(arguments[0])
+        `
+        
+        // Execute with custom console
+        const func = new Function('console', wrappedCode)
+        func(customConsole)
+        
+        setCodeOutput(logs.length > 0 ? logs.join('\n') : '✅ Code executed successfully (no output)')
+        toast.success('Code executed!')
+      }
+    } catch (error) {
+      setCodeOutput(`❌ Error: ${error.message}`)
+      toast.error('Code execution failed')
+    } finally {
+      setIsRunning(false)
+    }
   }
 
   const handleSubmitTask = async () => {
@@ -64,41 +152,81 @@ export default function Tasks() {
       return
     }
 
-    try {
-      toast.loading('Submitting your solution...')
-      
-      // Get AI feedback
-      const feedback = await aiAPI.getCodeFeedback({
-        code: userCode,
-        task: activeTask.title
-      })
-      
-      toast.dismiss()
-      toast.success('Solution submitted! Check the feedback.')
-      
-      // Display feedback
-      console.log('AI Feedback:', feedback.data)
-      
-      // Mark task as completed (in real app, would update backend)
-      toast('🎉 Task completed! +' + activeTask.xpReward + ' XP', {
-        duration: 4000,
-        icon: '✅'
-      })
-      
-      // Update task status locally
-      setTasks(tasks.map(t => 
-        t._id === activeTask._id ? { ...t, completed: true } : t
-      ))
-      
-      // Go back to task list after short delay
+    if (!user || (!user._id && !user.email)) {
+      toast.error('Please login to submit tasks')
+      // Redirect to login after 1.5 seconds
       setTimeout(() => {
-        handleBackToList()
-      }, 2000)
+        window.location.href = '/lms/login'
+      }, 1500)
+      return
+    }
+
+    try {
+      const loadingToast = toast.loading('Submitting your solution...')
+      
+      // Submit task to backend with both ID and email for better lookup
+      const submitData = {
+        userId: user._id,
+        email: user.email,
+        code: userCode
+      }
+
+      console.log('📤 Submitting task:', { taskId: activeTask._id, userId: user._id, email: user.email })
+
+      // Send object form so backend can resolve by email or id
+      const submitResponse = await tasksAPI.submit(activeTask._id, submitData)
+      
+      toast.dismiss(loadingToast)
+      
+      if (submitResponse.data.success) {
+        // Update local XP using Zustand store
+        const xpAwarded = submitResponse.data.xpAwarded
+        incrementXP(xpAwarded)
+        
+        // Update progress if returned from backend
+        if (submitResponse.data.progress) {
+          // Update user progress in auth store if needed
+          console.log('✅ Progress updated:', submitResponse.data.progress)
+        }
+        
+        // Refresh leaderboard after XP update
+        setTimeout(() => {
+          refreshLeaderboard()
+        }, 1000)
+        
+        // Show success message with XP
+        toast.success(`✅ Task submitted successfully! +${xpAwarded} XP earned!`, {
+          duration: 4000,
+          icon: '🎉'
+        })
+        
+        // Mark task as completed locally and save submitted code so it's
+        // available when user revisits or clicks "View Solution"
+        const updatedTasks = tasks.map(t => 
+          t._id === activeTask._id ? { ...t, completed: true, submittedCode: userCode } : t
+        )
+        setTasks(updatedTasks)
+
+        // Update activeTask so the editor shows the submitted solution
+        setActiveTask(prev => prev ? { ...prev, completed: true, submittedCode: userCode } : prev)
+      } else {
+        toast.error(submitResponse.data.message || 'Failed to submit solution')
+      }
       
     } catch (error) {
       toast.dismiss()
-      toast.error('Failed to submit solution')
-      console.error('Submit error:', error)
+      console.error('❌ Submit error:', error)
+      const errorMsg = error.response?.data?.message || 'Failed to submit solution. Please try again.'
+      
+      // If user not found, redirect to login
+      if (errorMsg.includes('not found') || errorMsg.includes('login')) {
+        toast.error(errorMsg + ' Redirecting to login...')
+        setTimeout(() => {
+          window.location.href = '/lms/login'
+        }, 2000)
+      } else {
+        toast.error(errorMsg)
+      }
     }
   }
 
@@ -212,26 +340,49 @@ export default function Tasks() {
                 onChange={setUserCode}
                 language="auto"
                 height="400px"
-                showRunButton={true}
+                showRunButton={false}
               />
             </div>
 
+            {/* Code Output */}
+            {codeOutput && (
+              <div className="bg-gray-900 rounded-xl overflow-hidden">
+                <h4 className="text-white font-semibold p-4 bg-gray-800 border-b border-gray-700">
+                  {codeOutput === 'HTML_PREVIEW' ? '🎨 Live Preview:' : '📤 Output:'}
+                </h4>
+                {codeOutput === 'HTML_PREVIEW' ? (
+                  // HTML/CSS Preview iframe
+                  <iframe
+                    srcDoc={userCode}
+                    title="Code Preview"
+                    sandbox="allow-scripts"
+                    className="w-full h-96 bg-white border-0"
+                    style={{ minHeight: '400px' }}
+                  />
+                ) : (
+                  // JavaScript console output
+                  <pre className="text-green-400 p-4 font-mono text-sm whitespace-pre-wrap">{codeOutput}</pre>
+                )}
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex items-center gap-3">
+              <button
+                onClick={handleRunCode}
+                disabled={isRunning}
+                className="px-6 py-3 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                <Play className="w-5 h-5" />
+                {isRunning ? 'Running...' : 'Run Code'}
+              </button>
+              
               <button
                 onClick={handleSubmitTask}
                 className="flex-1 btn-primary flex items-center justify-center gap-2"
               >
                 <Send className="w-5 h-5" />
                 Submit Solution
-              </button>
-              
-              <button
-                onClick={handleGetHint}
-                className="px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
-              >
-                <Lightbulb className="w-5 h-5" />
-                Get Hint
               </button>
             </div>
 

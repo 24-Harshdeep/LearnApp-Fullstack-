@@ -10,7 +10,7 @@ const router = express.Router()
 // Create a new class (Teacher only)
 router.post('/', verifyToken, isTeacher, async (req, res) => {
   try {
-    const { className, description } = req.body
+    const { className, subject, description } = req.body
 
     if (!className) {
       return res.status(400).json({ error: 'Class name is required' })
@@ -29,6 +29,7 @@ router.post('/', verifyToken, isTeacher, async (req, res) => {
     const newClass = new LMSClass({
       teacherId: req.user._id,
       className,
+      subject,
       description,
       joinCode
     })
@@ -233,6 +234,99 @@ router.get('/:id/export', verifyToken, isTeacher, async (req, res) => {
     res.json(exportData)
   } catch (error) {
     console.error('Export error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Rename class (Teacher only)
+router.put('/:id/rename', verifyToken, isTeacher, async (req, res) => {
+  try {
+    const { className } = req.body
+
+    if (!className) {
+      return res.status(400).json({ error: 'Class name is required' })
+    }
+
+    const classDoc = await LMSClass.findById(req.params.id)
+
+    if (!classDoc) {
+      return res.status(404).json({ error: 'Class not found' })
+    }
+
+    if (classDoc.teacherId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Access denied' })
+    }
+
+    classDoc.className = className
+    await classDoc.save()
+
+    res.json({ 
+      message: 'Class renamed successfully',
+      class: classDoc
+    })
+  } catch (error) {
+    console.error('Rename class error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Remove student from class (Teacher only)
+router.delete('/:id/students/:studentId', verifyToken, isTeacher, async (req, res) => {
+  try {
+    const { id, studentId } = req.params
+    
+    const classDoc = await LMSClass.findById(id)
+
+    if (!classDoc) {
+      return res.status(404).json({ error: 'Class not found' })
+    }
+
+    if (classDoc.teacherId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Access denied' })
+    }
+
+    // Remove student from class
+    classDoc.students = classDoc.students.filter(s => s.toString() !== studentId)
+    await classDoc.save()
+
+    // Remove class from student's classesJoined
+    await LMSUser.findByIdAndUpdate(studentId, {
+      $pull: { classesJoined: classDoc._id }
+    })
+
+    res.json({ message: 'Student removed successfully' })
+  } catch (error) {
+    console.error('Remove student error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Leave class (Student only)
+router.post('/:id/leave', verifyToken, isStudent, async (req, res) => {
+  try {
+    const classDoc = await LMSClass.findById(req.params.id)
+
+    if (!classDoc) {
+      return res.status(404).json({ error: 'Class not found' })
+    }
+
+    // Check if student is in the class
+    if (!classDoc.students.includes(req.user._id)) {
+      return res.status(400).json({ error: 'You are not in this class' })
+    }
+
+    // Remove student from class
+    classDoc.students = classDoc.students.filter(s => s.toString() !== req.user._id.toString())
+    await classDoc.save()
+
+    // Remove class from student's classesJoined
+    await LMSUser.findByIdAndUpdate(req.user._id, {
+      $pull: { classesJoined: classDoc._id }
+    })
+
+    res.json({ message: 'Left class successfully' })
+  } catch (error) {
+    console.error('Leave class error:', error)
     res.status(500).json({ error: error.message })
   }
 })

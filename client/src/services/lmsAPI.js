@@ -21,7 +21,9 @@ api.interceptors.request.use((config) => {
 
 // Auth APIs
 export const lmsAuthAPI = {
+  register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
+  googleLogin: (data) => api.post('/auth/google-login', data),
   getProfile: () => api.get('/auth/me')
 }
 
@@ -31,6 +33,9 @@ export const lmsClassAPI = {
   getAll: () => api.get('/classes'),
   getOne: (id) => api.get(`/classes/${id}`),
   join: (joinCode) => api.post('/classes/join', { joinCode }),
+  leave: (id) => api.post(`/classes/${id}/leave`),
+  rename: (id, className) => api.put(`/classes/${id}/rename`, { className }),
+  removeStudent: (classId, studentId) => api.delete(`/classes/${classId}/students/${studentId}`),
   resetCode: (id) => api.put(`/classes/${id}/reset-code`),
   export: (id) => api.get(`/classes/${id}/export`),
   delete: (id) => api.delete(`/classes/${id}`)

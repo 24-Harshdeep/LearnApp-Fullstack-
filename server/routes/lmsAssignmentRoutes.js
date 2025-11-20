@@ -8,10 +8,10 @@ const router = express.Router()
 // Create assignment (Teacher only)
 router.post('/', verifyToken, isTeacher, async (req, res) => {
   try {
-    const { classId, title, description, dueDate, maxPoints } = req.body
+    const { classId, title, description, attachmentLink, attachmentFile, dueDate, maxPoints } = req.body
 
     if (!classId || !title || !description || !dueDate) {
-      return res.status(400).json({ error: 'All fields are required' })
+      return res.status(400).json({ error: 'Title, description, and due date are required' })
     }
 
     // Verify teacher owns the class
@@ -28,6 +28,8 @@ router.post('/', verifyToken, isTeacher, async (req, res) => {
       classId,
       title,
       description,
+      attachmentLink: attachmentLink || '',
+      attachmentFile: attachmentFile || '',
       dueDate,
       maxPoints: maxPoints || 100
     })
@@ -127,10 +129,12 @@ router.put('/:id', verifyToken, isTeacher, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' })
     }
 
-    const { title, description, dueDate, maxPoints } = req.body
+    const { title, description, attachmentLink, attachmentFile, dueDate, maxPoints } = req.body
 
     if (title) assignment.title = title
     if (description) assignment.description = description
+    if (attachmentLink !== undefined) assignment.attachmentLink = attachmentLink
+    if (attachmentFile !== undefined) assignment.attachmentFile = attachmentFile
     if (dueDate) assignment.dueDate = dueDate
     if (maxPoints) assignment.maxPoints = maxPoints
 

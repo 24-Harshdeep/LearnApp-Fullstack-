@@ -10,10 +10,10 @@ const router = express.Router()
 // Submit assignment (Student only)
 router.post('/', verifyToken, isStudent, async (req, res) => {
   try {
-    const { assignmentId, code, fileUrl } = req.body
+    const { assignmentId, description, attachmentLink, attachmentFile } = req.body
 
-    if (!assignmentId || !code) {
-      return res.status(400).json({ error: 'Assignment ID and code are required' })
+    if (!assignmentId || !description) {
+      return res.status(400).json({ error: 'Assignment ID and description are required' })
     }
 
     const assignment = await LMSAssignment.findById(assignmentId).populate('classId')
@@ -35,8 +35,9 @@ router.post('/', verifyToken, isStudent, async (req, res) => {
 
     if (existingSubmission) {
       // Update existing submission
-      existingSubmission.code = code
-      existingSubmission.fileUrl = fileUrl
+      existingSubmission.description = description
+      existingSubmission.attachmentLink = attachmentLink || ''
+      existingSubmission.attachmentFile = attachmentFile || ''
       existingSubmission.submittedAt = new Date()
       existingSubmission.status = 'pending'
       await existingSubmission.save()
@@ -51,8 +52,9 @@ router.post('/', verifyToken, isStudent, async (req, res) => {
     const submission = new LMSSubmission({
       studentId: req.user._id,
       assignmentId,
-      code,
-      fileUrl
+      description,
+      attachmentLink: attachmentLink || '',
+      attachmentFile: attachmentFile || ''
     })
 
     await submission.save()
@@ -153,11 +155,7 @@ router.get('/:id', verifyToken, async (req, res) => {
 // Grade submission (Teacher only)
 router.put('/:id/grade', verifyToken, isTeacher, async (req, res) => {
   try {
-    const { feedback, points } = req.body
-
-    if (points === undefined) {
-      return res.status(400).json({ error: 'Points are required' })
-    }
+    const { feedback, points, status } = req.body
 
     const submission = await LMSSubmission.findById(req.params.id)
       .populate({
@@ -177,15 +175,17 @@ router.put('/:id/grade', verifyToken, isTeacher, async (req, res) => {
     }
 
     // Update submission
-    submission.feedback = feedback || ''
-    submission.points = points
-    submission.status = 'reviewed'
+    if (feedback !== undefined) submission.feedback = feedback
+    if (points !== undefined) submission.points = points
+    if (status) submission.status = status
     submission.reviewedAt = new Date()
 
     await submission.save()
 
-    // Update student's total points
-    await updateStudentPoints(submission.studentId)
+    // Update student's total points if points were given
+    if (points !== undefined) {
+      await updateStudentPoints(submission.studentId)
+    }
 
     res.json({
       message: 'Submission graded successfully',

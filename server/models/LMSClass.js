@@ -10,6 +10,10 @@ const lmsClassSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  subject: {
+    type: String,
+    default: ''
+  },
   description: String,
   joinCode: {
     type: String,

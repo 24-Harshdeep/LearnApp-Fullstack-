@@ -11,12 +11,22 @@ const lmsSubmissionSchema = new mongoose.Schema({
     ref: 'LMSAssignment',
     required: true
   },
-  code: {
+  description: {
     type: String,
     required: true
   },
-  fileUrl: String,
-  feedback: String,
+  attachmentLink: {
+    type: String,
+    default: ''
+  },
+  attachmentFile: {
+    type: String,
+    default: ''
+  },
+  feedback: {
+    type: String,
+    default: ''
+  },
   points: {
     type: Number,
     default: 0
@@ -28,7 +38,7 @@ const lmsSubmissionSchema = new mongoose.Schema({
   reviewedAt: Date,
   status: {
     type: String,
-    enum: ['pending', 'reviewed'],
+    enum: ['pending', 'reviewed', 'completed'],
     default: 'pending'
   }
 })

@@ -15,6 +15,14 @@ const lmsUserSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
+  password: {
+    type: String,
+    required: false // Not required for Google auth
+  },
+  googleId: {
+    type: String,
+    sparse: true // Allow multiple null values, unique only for non-null
+  },
   role: {
     type: String,
     enum: ['teacher', 'student'],

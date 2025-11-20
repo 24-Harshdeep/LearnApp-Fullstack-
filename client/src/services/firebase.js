@@ -1,19 +1,45 @@
-import { initializeApp } from 'firebase/app'
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth'
+// Google OAuth Configuration (Direct - No Firebase)
+const GOOGLE_CLIENT_ID = '330221998455-l5920jjq016cubbl4pajd8oqits37hgm.apps.googleusercontent.com'
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBHv_TqG5ZlQ3xU9X8mZJKqV4oRnWYwE7s",
-  authDomain: "learnapp-demo.firebaseapp.com",
-  projectId: "learnapp-demo",
-  storageBucket: "learnapp-demo.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef123456"
+// Initialize Google OAuth
+export const initGoogleAuth = () => {
+  return new Promise((resolve) => {
+    const script = document.createElement('script')
+    script.src = 'https://accounts.google.com/gsi/client'
+    script.async = true
+    script.defer = true
+    script.onload = () => resolve()
+    document.head.appendChild(script)
+  })
 }
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig)
-const auth = getAuth(app)
-const googleProvider = new GoogleAuthProvider()
+// Google Sign In
+export const signInWithGoogle = (callback) => {
+  window.google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: callback
+  })
+  
+  window.google.accounts.id.prompt()
+}
 
-export { auth, googleProvider, signInWithPopup, signOut }
-export default app
+// Render Google Button
+export const renderGoogleButton = (elementId, callback) => {
+  window.google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: callback
+  })
+  
+  window.google.accounts.id.renderButton(
+    document.getElementById(elementId),
+    { 
+      theme: 'outline', 
+      size: 'large',
+      text: 'continue_with',
+      width: '100%'
+    }
+  )
+}
+
+export default { initGoogleAuth, signInWithGoogle, renderGoogleButton }
+

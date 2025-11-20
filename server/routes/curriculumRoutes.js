@@ -1,4 +1,5 @@
 import express from 'express'
+import mongoose from 'mongoose'
 import Curriculum from '../models/Curriculum.js'
 import UserCurriculumProgress from '../models/UserCurriculumProgress.js'
 
@@ -134,9 +135,20 @@ router.post('/submit-task', async (req, res) => {
       lessonProgress.completed = true
       lessonProgress.completedAt = new Date()
       
-      // Award XP
+      // Award XP to progress
+      const xpReward = task.xpReward || 20
       if (passed) {
-        progress.xpEarned += task.xpReward || 20
+        progress.xpEarned += xpReward
+        
+        // Also update main User model for global XP tracking
+        const User = (await import('../models/User.js')).default
+        const user = await User.findOne({ email: progress.userId || userId })
+        if (user) {
+          user.xp += xpReward
+          user.calculateLevel()
+          await user.save()
+          console.log(`✅ Awarded ${xpReward} XP to user ${user.email} for curriculum task`)
+        }
       }
 
       // Move to next lesson
@@ -188,6 +200,101 @@ router.get('/lesson/:userId/:curriculumId/:subtopicIndex', async (req, res) => {
       currentIndex: progress.currentSubtopicIndex
     })
   } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Sync curriculum progress from frontend
+router.post('/sync-progress', async (req, res) => {
+  try {
+    const { email, curriculumId, topic, lessonIndex, lessonId } = req.body
+
+    // Find user by email
+    const User = (await import('../models/User.js')).default
+    const user = await User.findOne({ email })
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+
+    // Find or create curriculum progress
+    let progress = await UserCurriculumProgress.findOne({ 
+      userId: user._id, 
+      curriculumId 
+    })
+
+    const curriculum = await Curriculum.findById(curriculumId)
+    if (!curriculum) {
+      return res.status(404).json({ error: 'Curriculum not found' })
+    }
+
+    if (!progress) {
+      // Create new progress
+      const lessonsProgress = curriculum.subtopics.map((subtopic, index) => ({
+        subtopicId: subtopic._id || new mongoose.Types.ObjectId(),
+        lessonTitle: subtopic.title,
+        completed: index === lessonIndex,
+        startedAt: index <= lessonIndex ? new Date() : undefined,
+        completedAt: index === lessonIndex ? new Date() : undefined
+      }))
+
+      progress = new UserCurriculumProgress({
+        userId: user._id,
+        curriculumId,
+        topic: topic || curriculum.topic,
+        currentSubtopicIndex: lessonIndex,
+        lessonsProgress
+      })
+    } else {
+      // Update existing progress
+      if (lessonIndex < progress.lessonsProgress.length) {
+        progress.lessonsProgress[lessonIndex].completed = true
+        progress.lessonsProgress[lessonIndex].completedAt = new Date()
+        if (lessonIndex > progress.currentSubtopicIndex) {
+          progress.currentSubtopicIndex = lessonIndex
+        }
+      }
+    }
+
+    // Calculate total progress
+    progress.calculateProgress()
+    await progress.save()
+
+    console.log(`📊 Progress calculated for ${topic}:`, {
+      completedLessons: progress.lessonsProgress.filter(l => l.completed).length,
+      totalLessons: progress.lessonsProgress.length,
+      percentage: progress.totalProgress
+    })
+
+    // Update User model progress field
+    const topicKey = topic.toLowerCase().replace(/\s+/g, '').replace('.', '')
+    const validTopics = ['html', 'css', 'javascript', 'react', 'nodejs', 'typescript', 'python']
+    
+    console.log(`🔍 Topic mapping - Original: "${topic}", Key: "${topicKey}", Valid: ${validTopics.includes(topicKey)}`)
+    
+    if (validTopics.includes(topicKey)) {
+      if (!user.progress) {
+        user.progress = {}
+      }
+      const oldProgress = user.progress[topicKey]
+      user.progress[topicKey] = progress.totalProgress
+      await user.save()
+      
+      console.log(`✅ Updated User.progress.${topicKey}: ${oldProgress}% → ${progress.totalProgress}%`)
+      console.log(`📦 Full User.progress:`, user.progress)
+    } else {
+      console.log(`⚠️ Topic "${topicKey}" not in valid topics list. Valid topics are:`, validTopics)
+    }
+
+    res.json({
+      success: true,
+      totalProgress: progress.totalProgress,
+      topicKey,
+      userProgressUpdated: validTopics.includes(topicKey),
+      message: 'Progress synced successfully'
+    })
+  } catch (error) {
+    console.error('❌ Sync progress error:', error)
     res.status(500).json({ error: error.message })
   }
 })

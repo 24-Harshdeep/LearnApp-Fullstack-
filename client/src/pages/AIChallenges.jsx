@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast'
 import axios from 'axios'
 import { useAuthStore } from '../store/store'
 import CodeEditor from '../components/CodeEditor'
+import { generateQuiz, validateQuizAnswer, getAdaptiveDifficulty, generateDebugChallenge, analyzeCode } from '../services/unifiedAIAPI'
 
 const API_URL = 'http://localhost:5000/api/social'
 
@@ -40,51 +41,50 @@ const AIChallenges = () => {
   const [adaptiveCode, setAdaptiveCode] = useState('')
   const [submitted, setSubmitted] = useState(false)
 
-  // Load AI Quiz
+  // Load AI Quiz - Now using Unified Gemini API
   const loadQuiz = async (setup) => {
     setLoading(true)
     setQuizQuestions([]) // Reset questions
     setCurrentQuestion(0)
     setScore(0)
     setQuizCompleted(false)
+    setSelectedAnswer(null)
+    setShowExplanation(false)
     
     try {
-      console.log('🎯 Requesting quiz with:', setup)
-      console.log('📡 API URL:', `${API_URL}/ai/quiz`)
+      console.log('🎯 Requesting AI quiz with:', setup)
       
-      const response = await axios.post(`${API_URL}/ai/quiz`, {
-        topics: [setup.topic],
-        difficulty: setup.difficulty,
-        questionCount: setup.questionCount
-      })
+      // Call Unified Gemini API
+      const result = await generateQuiz(setup.topic, setup.difficulty, setup.questionCount)
       
-      console.log('✅ Quiz API Response:', response.data)
-      console.log('📝 Questions received:', response.data.questions?.length || 0)
+      console.log('✅ Gemini AI Response:', result)
       
       // Validate response has questions
-      if (!response.data.questions || response.data.questions.length === 0) {
-        throw new Error('No questions received from API')
+      if (!result.success || !result.questions || result.questions.length === 0) {
+        throw new Error('No questions received from Gemini AI')
       }
       
-      // Ensure each question has required fields
-      const validatedQuestions = response.data.questions.map((q, index) => ({
-        id: q.id || index + 1,
-        question: q.question || 'Question not available',
-        options: Array.isArray(q.options) ? q.options : ['Option A', 'Option B', 'Option C', 'Option D'],
-        correctAnswer: q.correctAnswer || q.options?.[0] || 'Option A',
-        explanation: q.explanation || 'Explanation not available'
+      // Map questions to match our format
+      const validatedQuestions = result.questions.map((q, index) => ({
+        id: index + 1,
+        question: q.question,
+        options: q.options, // Already an array from Gemini
+        correctAnswer: q.options[q.correctAnswer], // Convert index to actual answer string
+        correctAnswerIndex: q.correctAnswer, // Store index for validation
+        explanation: q.explanation,
+        difficulty: q.difficulty,
+        topic: q.topic
       }))
       
-      console.log('✅ Validated questions:', validatedQuestions.length, validatedQuestions)
+      console.log('✅ AI-generated questions:', validatedQuestions)
       
       setQuizQuestions(validatedQuestions)
       setShowQuizSetup(false)
       setTotalMarks(setup.questionCount * setup.marksPerQuestion)
-      toast.success(`AI Quiz generated! ${validatedQuestions.length} questions ready! 🎯`)
+      toast.success(`🤖 AI generated ${validatedQuestions.length} questions about ${setup.topic}!`)
     } catch (error) {
       console.error('❌ Quiz load error:', error)
-      console.error('Error details:', error.response?.data || error.message)
-      toast.error('Failed to load quiz: ' + (error.response?.data?.message || error.message))
+      toast.error('Failed to generate AI quiz. Please try again!')
       // Reset to setup form on error
       setShowQuizSetup(true)
     } finally {
@@ -92,26 +92,33 @@ const AIChallenges = () => {
     }
   }
 
-  // Load Debug Challenge
+  // Load Debug Challenge - Now using Unified Gemini API
   const loadDebugChallenge = async (setup) => {
     setLoading(true)
     try {
-      const response = await axios.post(`${API_URL}/ai/debug`, {
-        topic: setup.topic,
-        difficulty: setup.difficulty
-      })
+      console.log('🐛 Requesting debug challenge with:', setup)
       
-      setDebugChallenge(response.data)
-      setUserCode(response.data.buggyCode)
+      // Call Unified Gemini API
+      const result = await generateDebugChallenge(setup.topic, setup.difficulty)
+      
+      console.log('✅ Gemini Debug Challenge:', result)
+      
+      if (!result.success || !result.challenge) {
+        throw new Error('No challenge received from Gemini AI')
+      }
+      
+      setDebugChallenge(result.challenge)
+      setUserCode(result.challenge.buggyCode)
       setShowHints(false)
       setHintsRevealed(0)
       setDebugSolved(false)
       setShowDebugSetup(false)
       setDebugStartTime(Date.now())
-      toast.success('Debug challenge loaded! 🐛')
+      toast.success('🤖 AI Debug Challenge loaded! 🐛')
     } catch (error) {
-      console.error('Debug load error:', error)
-      toast.error('Failed to load debug challenge')
+      console.error('❌ Debug load error:', error)
+      toast.error('Failed to generate debug challenge')
+      setShowDebugSetup(true)
     } finally {
       setLoading(false)
     }
@@ -139,21 +146,52 @@ const AIChallenges = () => {
     }
   }
 
-  // Handle Quiz Answer
-  const handleAnswerSelect = (answer) => {
+  // Handle Quiz Answer - Now with AI validation
+  const handleAnswerSelect = async (answer) => {
     if (showExplanation) return
     
     setSelectedAnswer(answer)
-    const isCorrect = answer === quizQuestions[currentQuestion].correctAnswer
+    const currentQ = quizQuestions[currentQuestion]
+    const isCorrect = answer === currentQ.correctAnswer
     
     if (isCorrect) {
       setScore(prev => prev + 1)
+    }
+    
+    console.log('📝 Selected answer:', answer)
+    console.log('✅ Correct answer:', currentQ.correctAnswer)
+    console.log('📊 Is correct:', isCorrect)
+    
+    // Get AI-powered feedback
+    try {
+      const result = await validateQuizAnswer(
+        currentQ.question,
+        currentQ.options.indexOf(answer), // Convert answer to index
+        currentQ.correctAnswerIndex,
+        currentQ.options
+      )
+      
+      console.log('🤖 AI Validation result:', result)
+      
+      if (result.success && result.feedback) {
+        // Use AI-generated feedback
+        currentQ.aiFeedback = result.feedback
+        console.log('💬 AI Feedback:', result.feedback)
+      }
+    } catch (error) {
+      console.error('AI validation error:', error)
+      // Will use default explanation
+    }
+    
+    setShowExplanation(true)
+    console.log('📖 Show explanation set to:', true)
+    console.log('📚 Current question data:', currentQ)
+    
+    if (isCorrect) {
       toast.success('Correct! 🎉')
     } else {
       toast.error('Wrong answer 😅')
     }
-    
-    setShowExplanation(true)
   }
 
   // Next Question
@@ -168,21 +206,78 @@ const AIChallenges = () => {
     }
   }
 
-  // Check Debug Solution
-  const checkDebugSolution = () => {
-    // Simple check: if user code contains key elements from solution
-    const solutionKeywords = debugChallenge.solution.replace(/\s+/g, '').toLowerCase()
-    const userKeywords = userCode.replace(/\s+/g, '').toLowerCase()
+  // Check Debug Solution with AI Analysis
+  const checkDebugSolution = async () => {
+    setLoading(true)
     
-    const similarity = userKeywords === solutionKeywords
-    
-    if (similarity) {
-      setDebugSolved(true)
-      setDebugEndTime(Date.now())
-      const timeTaken = Math.floor((Date.now() - debugStartTime) / 1000)
-      toast.success(`Bug fixed in ${timeTaken}s! Great debugging! 🎉`)
-    } else {
-      toast.error('Not quite right. Try again or reveal a hint! 💡')
+    try {
+      // Use AI to analyze the user's code
+      const result = await analyzeCode(
+        userCode,
+        'JavaScript',
+        debugChallenge.description
+      )
+      
+      if (result.success) {
+        // Check if AI analysis indicates the code is correct
+        const analysis = result.analysis.toLowerCase()
+        const isCorrect = 
+          analysis.includes('correct') ||
+          analysis.includes('fixed') ||
+          analysis.includes('looks good') ||
+          analysis.includes('no bugs') ||
+          analysis.includes('well done') ||
+          (!analysis.includes('bug') && !analysis.includes('error') && !analysis.includes('issue'))
+        
+        if (isCorrect) {
+          setDebugSolved(true)
+          setDebugEndTime(Date.now())
+          const timeTaken = Math.floor((Date.now() - debugStartTime) / 1000)
+          toast.success(`Bug fixed in ${timeTaken}s! Great debugging! 🎉`)
+        } else {
+          toast.error('Not quite right. AI found issues: ' + result.analysis.substring(0, 100) + '...')
+        }
+      } else {
+        // Fallback: Compare with solution (more lenient)
+        const solutionClean = debugChallenge.solution
+          .replace(/\s+/g, '')
+          .replace(/['"]/g, '')
+          .toLowerCase()
+        const userClean = userCode
+          .replace(/\s+/g, '')
+          .replace(/['"]/g, '')
+          .toLowerCase()
+        
+        // Check if key parts are present (more lenient than exact match)
+        const similarity = solutionClean.includes(userClean) || 
+                          userClean.includes(solutionClean) ||
+                          solutionClean === userClean
+        
+        if (similarity) {
+          setDebugSolved(true)
+          setDebugEndTime(Date.now())
+          const timeTaken = Math.floor((Date.now() - debugStartTime) / 1000)
+          toast.success(`Bug fixed in ${timeTaken}s! Great debugging! 🎉`)
+        } else {
+          toast.error('Not quite right. Try again or reveal a hint! 💡')
+        }
+      }
+    } catch (error) {
+      console.error('Debug check error:', error)
+      // Fallback to simple comparison if AI fails
+      const solutionClean = debugChallenge.solution.replace(/\s+/g, '').toLowerCase()
+      const userClean = userCode.replace(/\s+/g, '').toLowerCase()
+      
+      if (solutionClean === userClean || userClean.includes(solutionClean)) {
+        setDebugSolved(true)
+        setDebugEndTime(Date.now())
+        const timeTaken = Math.floor((Date.now() - debugStartTime) / 1000)
+        toast.success(`Bug fixed in ${timeTaken}s! Great debugging! 🎉`)
+      } else {
+        toast.error('Not quite right. Try again or reveal a hint! 💡')
+      }
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -307,15 +402,16 @@ const AIChallenges = () => {
                       required
                       className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                     >
-                      <option value="JavaScript">JavaScript</option>
-                      <option value="React">React</option>
-                      <option value="HTML">HTML</option>
-                      <option value="CSS">CSS</option>
-                      <option value="Python">Python</option>
-                      <option value="Node.js">Node.js</option>
+                      <option value="JavaScript Fundamentals">JavaScript Fundamentals</option>
+                      <option value="React Basics">React Basics</option>
+                      <option value="HTML & CSS">HTML & CSS</option>
+                      <option value="ES6 Features">ES6 Features</option>
+                      <option value="Async JavaScript">Async JavaScript</option>
+                      <option value="React Hooks">React Hooks</option>
+                      <option value="API Integration">API Integration</option>
+                      <option value="Git & GitHub">Git & GitHub</option>
                       <option value="TypeScript">TypeScript</option>
-                      <option value="Data Structures">Data Structures</option>
-                      <option value="Algorithms">Algorithms</option>
+                      <option value="Node.js">Node.js</option>
                     </select>
                   </div>
 
@@ -324,8 +420,8 @@ const AIChallenges = () => {
                     <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                       Difficulty Level
                     </label>
-                    <div className="grid grid-cols-3 gap-3">
-                      {['easy', 'medium', 'hard'].map((diff) => (
+                    <div className="grid grid-cols-4 gap-3">
+                      {['easy', 'medium', 'hard', 'expert'].map((diff) => (
                         <label
                           key={diff}
                           className="relative flex items-center justify-center cursor-pointer"
@@ -334,7 +430,7 @@ const AIChallenges = () => {
                             type="radio"
                             name="difficulty"
                             value={diff}
-                            defaultChecked={diff === 'easy'}
+                            defaultChecked={diff === 'medium'}
                             className="peer sr-only"
                           />
                           <div className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 dark:border-gray-600 peer-checked:border-purple-500 peer-checked:bg-purple-50 dark:peer-checked:bg-purple-900/30 transition-all text-center font-semibold capitalize">
@@ -388,12 +484,12 @@ const AIChallenges = () => {
                     {loading ? (
                       <>
                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                        Generating Quiz...
+                        Generating with AI...
                       </>
                     ) : (
                       <>
                         <Play className="w-5 h-5" />
-                        Generate AI Quiz
+                        Generate AI Quiz 🤖
                       </>
                     )}
                   </motion.button>
@@ -406,7 +502,7 @@ const AIChallenges = () => {
                   AI Quiz Master
                 </h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-md mx-auto">
-                  Get personalized quiz questions generated by AI based on your level and learning progress!
+                  Get personalized quiz questions powered by Gemini 2.5 Flash AI! All questions generated dynamically based on your selection.
                 </p>
                 <motion.button
                   onClick={() => setShowQuizSetup(true)}
@@ -480,12 +576,14 @@ const AIChallenges = () => {
                   >
                     <div className="flex items-start gap-2">
                       <Lightbulb className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-                      <div>
+                      <div className="w-full">
                         <div className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                          Explanation
+                          AI Explanation
                         </div>
-                        <p className="text-sm text-blue-800 dark:text-blue-200">
-                          {quizQuestions[currentQuestion]?.explanation}
+                        <p className="text-sm text-blue-800 dark:text-blue-200 whitespace-pre-wrap">
+                          {quizQuestions[currentQuestion]?.aiFeedback || 
+                           quizQuestions[currentQuestion]?.explanation || 
+                           'Explanation not available. The AI is analyzing your answer...'}
                         </p>
                       </div>
                     </div>
@@ -791,16 +889,27 @@ const AIChallenges = () => {
                   <div className="flex gap-3">
                     <motion.button
                       onClick={checkDebugSolution}
-                      className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white py-3 rounded-xl font-bold hover:from-green-600 hover:to-emerald-600 transition-all flex items-center justify-center gap-2"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
+                      disabled={loading}
+                      className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white py-3 rounded-xl font-bold hover:from-green-600 hover:to-emerald-600 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      whileHover={{ scale: loading ? 1 : 1.02 }}
+                      whileTap={{ scale: loading ? 1 : 0.98 }}
                     >
-                      <CheckCircle className="w-5 h-5" />
-                      Check Solution
+                      {loading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                          Analyzing with AI...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-5 h-5" />
+                          Check Solution
+                        </>
+                      )}
                     </motion.button>
                     <motion.button
                       onClick={() => setShowHints(!showHints)}
-                      className="px-6 bg-yellow-500 text-white py-3 rounded-xl font-bold hover:bg-yellow-600 transition-all flex items-center gap-2"
+                      disabled={loading}
+                      className="px-6 bg-yellow-500 text-white py-3 rounded-xl font-bold hover:bg-yellow-600 transition-all flex items-center gap-2 disabled:opacity-50"
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                     >

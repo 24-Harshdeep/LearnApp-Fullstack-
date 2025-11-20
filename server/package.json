@@ -19,10 +19,13 @@
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
     "firebase-admin": "^13.5.0",
+    "google-auth-library": "^10.5.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.1.1",
+    "multer": "^2.0.2",
     "node-fetch": "^2.7.0",
-    "openai": "^6.6.0"
+  "openai": "^6.6.0",
+  "socket.io": "^4.7.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.3"

@@ -1,586 +1,489 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
-import { lmsClassAPI, lmsAssignmentAPI, lmsSubmissionAPI } from '../services/lmsAPI'
-import { FaPlus, FaUsers, FaCopy, FaChartLine, FaSignOutAlt, FaCode } from 'react-icons/fa'
-import { signOut, auth } from '../services/firebase'
+import { FiSearch, FiFilter, FiUser, FiTrendingUp, FiAward, FiUsers } from 'react-icons/fi'
+import axios from 'axios'
+import toast from 'react-hot-toast'
+import StudentProgressModal from '../components/StudentProgressModal'
+import { useAppStore } from '../store/store'
 
 const TeacherDashboard = () => {
-  const [user, setUser] = useState(null)
-  const [classes, setClasses] = useState([])
-  const [selectedClass, setSelectedClass] = useState(null)
-  const [assignments, setAssignments] = useState([])
-  const [submissions, setSubmissions] = useState([])
+  const [students, setStudents] = useState([])
+  const [filteredStudents, setFilteredStudents] = useState([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('overview')
-  const navigate = useNavigate()
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedStudent, setSelectedStudent] = useState(null)
+  const [showModal, setShowModal] = useState(false)
+  const [filterOption, setFilterOption] = useState('all') // all, my-students
+  const [stats, setStats] = useState({
+    totalStudents: 0,
+    avgXP: 0,
+    activeToday: 0,
+    topPerformer: null
+  })
 
-  // Modals
-  const [showCreateClass, setShowCreateClass] = useState(false)
-  const [showCreateAssignment, setShowCreateAssignment] = useState(false)
-  const [showGrading, setShowGrading] = useState(false)
-  const [selectedSubmission, setSelectedSubmission] = useState(null)
-
-  // Form states
-  const [className, setClassName] = useState('')
-  const [classDescription, setClassDescription] = useState('')
-  const [assignmentTitle, setAssignmentTitle] = useState('')
-  const [assignmentDescription, setAssignmentDescription] = useState('')
-  const [dueDate, setDueDate] = useState('')
-  const [feedback, setFeedback] = useState('')
-  const [points, setPoints] = useState(0)
+  // read global leaderboard to merge badges/streak info when available
+  const globalLeaderboard = useAppStore(state => state.leaderboard)
 
   useEffect(() => {
-    const userData = JSON.parse(localStorage.getItem('lms_user'))
-    if (!userData || userData.role !== 'teacher') {
-      navigate('/lms/login')
-      return
-    }
-    setUser(userData)
-    loadClasses()
-  }, [])
+    fetchStudents()
+  }, [filterOption])
 
-  const loadClasses = async () => {
+  useEffect(() => {
+    // Filter students based on search
+    if (searchTerm) {
+      const filtered = students.filter(student =>
+        student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        student.email?.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+      setFilteredStudents(filtered)
+    } else {
+      setFilteredStudents(students)
+    }
+  }, [searchTerm, students])
+
+  const fetchStudents = async () => {
     try {
-      const response = await lmsClassAPI.getAll()
-      setClasses(response.data)
+      setLoading(true)
+      const token = localStorage.getItem('lmsToken')
+      
+      // Try teacher endpoint first
+      let endpoint = filterOption === 'my-students' 
+        ? '/api/teacher/my-students' 
+        : '/api/teacher/students'
+      
+      try {
+        const { data } = await axios.get(`http://localhost:5000${endpoint}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
+
+        if (data.success && data.students) {
+          // Normalize streak field
+          const normalizedStudents = data.students.map(student => ({
+            ...student,
+            streak: typeof student.streak === 'object' && student.streak !== null
+              ? student.streak.currentStreak || 0
+              : student.streak || 0
+          }))
+
+          // Merge badges and loginStreak from global leaderboard when available so teacher view matches leaderboard
+          const merged = normalizedStudents.map(student => {
+            const lb = (globalLeaderboard || []).find(l => l._id === student._id || l.email === student.email)
+            return {
+              ...student,
+              badges: student.badges || lb?.badges || [],
+              loginStreak: student.loginStreak ?? lb?.loginStreak ?? student.streak
+            }
+          })
+
+          setStudents(merged)
+          setFilteredStudents(merged)
+          calculateStats(merged)
+          return
+        }
+      } catch (teacherError) {
+        console.log('Teacher endpoint failed, trying fallback...', teacherError.response?.status)
+        
+        // Fallback: Try to get all users
+        try {
+          const { data: userData } = await axios.get('http://localhost:5000/api/users')
+          
+          if (userData.success && userData.users) {
+            // Filter only students and normalize streak
+            const studentUsers = userData.users
+              .filter(u => u.role === 'student' || !u.role)
+              .map(student => ({
+                ...student,
+                streak: typeof student.streak === 'object' && student.streak !== null
+                  ? student.streak.currentStreak || 0
+                  : student.streak || 0
+              }))
+
+            const merged = studentUsers.map(student => {
+              const lb = (globalLeaderboard || []).find(l => l._id === student._id || l.email === student.email)
+              return {
+                ...student,
+                badges: student.badges || lb?.badges || [],
+                loginStreak: student.loginStreak ?? lb?.loginStreak ?? student.streak
+              }
+            })
+
+            setStudents(merged)
+            setFilteredStudents(merged)
+            calculateStats(merged)
+            return
+          }
+        } catch (userError) {
+          console.error('User endpoint also failed:', userError)
+        }
+
+        // Last fallback: Try LMS users
+        try {
+          const { data: lmsData } = await axios.get('http://localhost:5000/api/lms/auth/users', {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
+          
+          if (lmsData && Array.isArray(lmsData)) {
+            const lmsStudents = lmsData
+              .filter(u => u.role === 'student')
+              .map(u => ({
+                ...u,
+                _id: u._id || u.id || u.email,
+                xp: u.points || 0,
+                level: Math.floor((u.points || 0) / 100) + 1,
+                streak: 0,
+                lastActive: u.createdAt,
+                progress: {}
+              }))
+
+            const merged = lmsStudents.map(student => {
+              const lb = (globalLeaderboard || []).find(l => l._id === student._id || l.email === student.email)
+              return {
+                ...student,
+                badges: student.badges || lb?.badges || [],
+                loginStreak: student.loginStreak ?? lb?.loginStreak ?? student.streak
+              }
+            })
+
+            setStudents(merged)
+            setFilteredStudents(merged)
+            calculateStats(merged)
+            return
+          }
+        } catch (lmsError) {
+          console.error('LMS endpoint also failed:', lmsError)
+        }
+
+        throw new Error('All endpoints failed')
+      }
     } catch (error) {
-      console.error('Load classes error:', error)
+      console.error('Error fetching students:', error)
+      toast.error('Unable to fetch students. Please make sure you are logged in as a teacher.')
+      setStudents([])
+      setFilteredStudents([])
     } finally {
       setLoading(false)
     }
   }
 
-  const handleCreateClass = async (e) => {
-    e.preventDefault()
-    try {
-      await lmsClassAPI.create({
-        className,
-        description: classDescription
-      })
-      setShowCreateClass(false)
-      setClassName('')
-      setClassDescription('')
-      loadClasses()
-    } catch (error) {
-      alert(error.response?.data?.error || 'Failed to create class')
-    }
-  }
-
-  const handleSelectClass = async (classId) => {
-    try {
-      const classResponse = await lmsClassAPI.getOne(classId)
-      setSelectedClass(classResponse.data)
-      
-      const assignmentsResponse = await lmsAssignmentAPI.getByClass(classId)
-      setAssignments(assignmentsResponse.data)
-      
-      setActiveTab('details')
-    } catch (error) {
-      console.error('Load class error:', error)
-    }
-  }
-
-  const handleCreateAssignment = async (e) => {
-    e.preventDefault()
-    if (!selectedClass) return
+  const calculateStats = (studentsList) => {
+    const totalStudents = studentsList.length
+    const avgXP = studentsList.reduce((sum, s) => sum + (s.xp || 0), 0) / totalStudents || 0
     
-    try {
-      await lmsAssignmentAPI.create({
-        classId: selectedClass._id,
-        title: assignmentTitle,
-        description: assignmentDescription,
-        dueDate: new Date(dueDate)
-      })
-      setShowCreateAssignment(false)
-      setAssignmentTitle('')
-      setAssignmentDescription('')
-      setDueDate('')
-      handleSelectClass(selectedClass._id)
-    } catch (error) {
-      alert(error.response?.data?.error || 'Failed to create assignment')
-    }
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const activeToday = studentsList.filter(s => 
+      s.lastActive && new Date(s.lastActive) >= today
+    ).length
+
+    const topPerformer = studentsList.reduce((top, student) => 
+      (!top || student.xp > top.xp) ? student : top
+    , null)
+
+    setStats({
+      totalStudents,
+      avgXP: Math.round(avgXP),
+      activeToday,
+      topPerformer
+    })
   }
 
-  const handleViewSubmissions = async (assignmentId) => {
-    try {
-      const response = await lmsSubmissionAPI.getByAssignment(assignmentId)
-      setSubmissions(response.data)
-      setActiveTab('feedback')
-    } catch (error) {
-      console.error('Load submissions error:', error)
-    }
+  const handleStudentClick = (student) => {
+    setSelectedStudent(student)
+    setShowModal(true)
   }
 
-  const handleGradeSubmission = async (submission) => {
-    setSelectedSubmission(submission)
-    setFeedback(submission.feedback || '')
-    setPoints(submission.points || 0)
-    setShowGrading(true)
+  const getProgressPercentage = (student) => {
+    if (!student.progress) return 0
+    const values = Object.values(student.progress)
+    const avg = values.reduce((sum, val) => sum + val, 0) / values.length
+    return Math.round(avg)
   }
 
-  const submitGrade = async (e) => {
-    e.preventDefault()
-    try {
-      await lmsSubmissionAPI.grade(selectedSubmission._id, {
-        feedback,
-        points: Number(points)
-      })
-      setShowGrading(false)
-      alert('Grade submitted successfully!')
-      // Reload submissions
-      if (selectedClass) {
-        handleSelectClass(selectedClass._id)
-      }
-    } catch (error) {
-      alert(error.response?.data?.error || 'Failed to submit grade')
-    }
-  }
-
-  const copyJoinCode = (code) => {
-    navigator.clipboard.writeText(code)
-    alert(`Join code ${code} copied to clipboard!`)
-  }
-
-  const handleLogout = async () => {
-    await signOut(auth)
-    localStorage.removeItem('lms_token')
-    localStorage.removeItem('lms_user')
-    navigate('/lms/login')
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    )
+  const formatLastActive = (date) => {
+    if (!date) return 'Never'
+    const lastActive = new Date(date)
+    const now = new Date()
+    const diffMs = now - lastActive
+    const diffMins = Math.floor(diffMs / 60000)
+    
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins}m ago`
+    
+    const diffHours = Math.floor(diffMins / 60)
+    if (diffHours < 24) return `${diffHours}h ago`
+    
+    const diffDays = Math.floor(diffHours / 24)
+    if (diffDays < 7) return `${diffDays}d ago`
+    
+    return lastActive.toLocaleDateString()
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 shadow-lg">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold">Teacher Dashboard</h1>
-            <p className="text-blue-100">Welcome back, {user?.name}!</p>
-          </div>
-          <div className="flex items-center space-x-4">
-            <div className="text-right">
-              <p className="text-sm text-blue-100">Total Classes</p>
-              <p className="text-2xl font-bold">{classes.length}</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
-            >
-              <FaSignOutAlt />
-              <span>Logout</span>
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-purple-900 dark:to-indigo-900 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <h1 className="text-4xl font-bold text-gray-800 dark:text-white mb-2">
+            Teacher Dashboard
+          </h1>
+          <p className="text-gray-600 dark:text-gray-300">
+            Monitor and manage your students' progress
+          </p>
+        </motion.div>
 
-      <div className="max-w-7xl mx-auto p-6">
-        {/* Tabs */}
-        <div className="bg-white rounded-lg shadow-md mb-6 p-4 flex space-x-4">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
-              activeTab === 'overview' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            Overview
-          </button>
-          {selectedClass && (
-            <>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <StatsCard
+            icon={<FiUsers className="w-8 h-8" />}
+            title="Total Students"
+            value={stats.totalStudents}
+            color="blue"
+          />
+          <StatsCard
+            icon={<FiTrendingUp className="w-8 h-8" />}
+            title="Average XP"
+            value={stats.avgXP}
+            color="green"
+          />
+          <StatsCard
+            icon={<FiUser className="w-8 h-8" />}
+            title="Active Today"
+            value={stats.activeToday}
+            color="purple"
+          />
+          <StatsCard
+            icon={<FiAward className="w-8 h-8" />}
+            title="Top Performer"
+            value={stats.topPerformer?.name || 'N/A'}
+            color="yellow"
+            isText
+          />
+        </div>
+
+        {/* Search and Filters */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 mb-6"
+        >
+          <div className="flex flex-col md:flex-row gap-4">
+            {/* Search */}
+            <div className="flex-1 relative">
+              <FiSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search by name or email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl 
+                         bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white
+                         focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+
+            {/* Filter */}
+            <div className="flex gap-2">
               <button
-                onClick={() => setActiveTab('details')}
-                className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
-                  activeTab === 'details' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                onClick={() => setFilterOption('all')}
+                className={`px-6 py-3 rounded-xl font-medium transition-all ${
+                  filterOption === 'all'
+                    ? 'bg-purple-600 text-white shadow-lg'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                 }`}
               >
-                Class Details
+                All Students
               </button>
               <button
-                onClick={() => setActiveTab('feedback')}
-                className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
-                  activeTab === 'feedback' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                onClick={() => setFilterOption('my-students')}
+                className={`px-6 py-3 rounded-xl font-medium transition-all ${
+                  filterOption === 'my-students'
+                    ? 'bg-purple-600 text-white shadow-lg'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                 }`}
               >
-                Feedback Panel
+                My Classes
               </button>
-            </>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Students Table */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden"
+        >
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-white">
+              Students List
+            </h2>
+            <p className="text-gray-600 dark:text-gray-300 mt-1">
+              {filteredStudents.length} students found
+            </p>
+          </div>
+
+          {loading ? (
+            <div className="p-12 text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+              <p className="mt-4 text-gray-600 dark:text-gray-300">Loading students...</p>
+            </div>
+          ) : filteredStudents.length === 0 ? (
+            <div className="p-12 text-center">
+              <FiUsers className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600 dark:text-gray-300">No students found</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Student
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Email
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      XP
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Level
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Streak
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Badges
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Progress
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Last Active
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {filteredStudents.map((student, index) => (
+                    <motion.tr
+                      key={student._id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      onClick={() => handleStudentClick(student)}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 flex items-center justify-center text-white font-bold">
+                            {student.name?.charAt(0).toUpperCase() || 'U'}
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {student.name || 'Unknown'}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
+                        {student.email}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">
+                            {student.xp || 0}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                          Level {student.level || 1}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <span className="text-sm text-orange-600 dark:text-orange-400 font-medium">
+                            🔥 {student.streak || 0}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {student.badges && student.badges.length > 0 ? (
+                          <div className="text-sm font-semibold text-yellow-600">🏅 {student.badges.length}</div>
+                        ) : (
+                          <div className="text-sm text-gray-400">—</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2 mr-2">
+                            <div
+                              className="bg-gradient-to-r from-green-400 to-blue-500 h-2 rounded-full"
+                              style={{ width: `${getProgressPercentage(student)}%` }}
+                            />
+                          </div>
+                          <span className="text-sm text-gray-600 dark:text-gray-300">
+                            {getProgressPercentage(student)}%
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
+                        {formatLastActive(student.lastActive)}
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
-        </div>
-
-        {/* Overview Tab */}
-        {activeTab === 'overview' && (
-          <div>
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">My Classes</h2>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setShowCreateClass(true)}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center space-x-2"
-              >
-                <FaPlus />
-                <span>Create New Class</span>
-              </motion.button>
-            </div>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {classes.map((cls) => (
-                <motion.div
-                  key={cls._id}
-                  whileHover={{ scale: 1.02 }}
-                  className="bg-white rounded-lg shadow-md p-6 cursor-pointer"
-                  onClick={() => handleSelectClass(cls._id)}
-                >
-                  <h3 className="text-xl font-bold text-gray-800 mb-2">{cls.className}</h3>
-                  <p className="text-gray-600 text-sm mb-4">{cls.description || 'No description'}</p>
-                  
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-2 text-gray-700">
-                      <FaUsers />
-                      <span>{cls.students?.length || 0} students</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-gray-700">
-                      <FaCode />
-                      <span>{cls.assignments?.length || 0} tasks</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-blue-50 p-3 rounded-lg flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-gray-600">Join Code</p>
-                      <p className="text-xl font-bold text-blue-600">{cls.joinCode}</p>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        copyJoinCode(cls.joinCode)
-                      }}
-                      className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      <FaCopy />
-                    </button>
-                  </div>
-                </motion.div>
-              ))}
-
-              {classes.length === 0 && (
-                <div className="col-span-full text-center py-12">
-                  <p className="text-gray-500 mb-4">No classes yet. Create your first class to get started!</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Class Details Tab */}
-        {activeTab === 'details' && selectedClass && (
-          <div>
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">{selectedClass.className}</h2>
-              <p className="text-gray-600 mb-4">{selectedClass.description}</p>
-              <div className="flex space-x-6">
-                <div className="flex items-center space-x-2 text-gray-700">
-                  <FaUsers className="text-blue-600" />
-                  <span>{selectedClass.students?.length || 0} Students</span>
-                </div>
-                <div className="bg-blue-50 px-4 py-2 rounded-lg">
-                  <span className="text-sm text-gray-600">Join Code: </span>
-                  <span className="text-lg font-bold text-blue-600">{selectedClass.joinCode}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-gray-800">Assignments</h3>
-              <button
-                onClick={() => setShowCreateAssignment(true)}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
-              >
-                <FaPlus />
-                <span>New Assignment</span>
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {assignments.map((assignment) => (
-                <div key={assignment._id} className="bg-white rounded-lg shadow-md p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h4 className="text-lg font-bold text-gray-800">{assignment.title}</h4>
-                      <p className="text-gray-600 text-sm mt-1">{assignment.description}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-gray-500">Due Date</p>
-                      <p className="text-sm font-semibold text-gray-700">
-                        {new Date(assignment.dueDate).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">
-                      {assignment.submissions?.length || 0} submissions
-                    </span>
-                    <button
-                      onClick={() => handleViewSubmissions(assignment._id)}
-                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
-                    >
-                      View Submissions
-                    </button>
-                  </div>
-                </div>
-              ))}
-
-              {assignments.length === 0 && (
-                <div className="text-center py-12 text-gray-500">
-                  No assignments yet. Create one to get started!
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Feedback Panel Tab */}
-        {activeTab === 'feedback' && (
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Student Submissions</h2>
-            <div className="space-y-4">
-              {submissions.map((submission) => (
-                <div key={submission._id} className="bg-white rounded-lg shadow-md p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h4 className="text-lg font-bold text-gray-800">
-                        {submission.studentId?.name || 'Unknown Student'}
-                      </h4>
-                      <p className="text-sm text-gray-600">{submission.studentId?.email}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Submitted: {new Date(submission.submittedAt).toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                        submission.status === 'reviewed' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {submission.status === 'reviewed' ? `Graded: ${submission.points}/100` : 'Pending'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="bg-gray-50 p-4 rounded-lg mb-4 max-h-60 overflow-y-auto">
-                    <p className="text-xs text-gray-600 mb-2">Submitted Code:</p>
-                    <pre className="text-sm text-gray-800 whitespace-pre-wrap font-mono">
-                      {submission.code}
-                    </pre>
-                  </div>
-
-                  {submission.feedback && (
-                    <div className="bg-blue-50 p-4 rounded-lg mb-4">
-                      <p className="text-xs text-gray-600 mb-2">Feedback:</p>
-                      <p className="text-sm text-gray-800">{submission.feedback}</p>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => handleGradeSubmission(submission)}
-                    className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors w-full"
-                  >
-                    {submission.status === 'reviewed' ? 'Update Grade' : 'Grade Submission'}
-                  </button>
-                </div>
-              ))}
-
-              {submissions.length === 0 && (
-                <div className="text-center py-12 text-gray-500">
-                  No submissions yet.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        </motion.div>
       </div>
 
-      {/* Create Class Modal */}
-      {showCreateClass && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-lg p-8 max-w-md w-full"
-          >
-            <h3 className="text-2xl font-bold mb-4">Create New Class</h3>
-            <form onSubmit={handleCreateClass}>
-              <div className="mb-4">
-                <label className="block text-gray-700 font-semibold mb-2">Class Name</label>
-                <input
-                  type="text"
-                  value={className}
-                  onChange={(e) => setClassName(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div className="mb-6">
-                <label className="block text-gray-700 font-semibold mb-2">Description</label>
-                <textarea
-                  value={classDescription}
-                  onChange={(e) => setClassDescription(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows="3"
-                />
-              </div>
-              <div className="flex space-x-4">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateClass(false)}
-                  className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Create
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Create Assignment Modal */}
-      {showCreateAssignment && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-lg p-8 max-w-md w-full"
-          >
-            <h3 className="text-2xl font-bold mb-4">Create Assignment</h3>
-            <form onSubmit={handleCreateAssignment}>
-              <div className="mb-4">
-                <label className="block text-gray-700 font-semibold mb-2">Title</label>
-                <input
-                  type="text"
-                  value={assignmentTitle}
-                  onChange={(e) => setAssignmentTitle(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-gray-700 font-semibold mb-2">Description</label>
-                <textarea
-                  value={assignmentDescription}
-                  onChange={(e) => setAssignmentDescription(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows="3"
-                  required
-                />
-              </div>
-              <div className="mb-6">
-                <label className="block text-gray-700 font-semibold mb-2">Due Date</label>
-                <input
-                  type="datetime-local"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div className="flex space-x-4">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateAssignment(false)}
-                  className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  Create
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Grading Modal */}
-      {showGrading && selectedSubmission && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-lg p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-          >
-            <h3 className="text-2xl font-bold mb-4">Grade Submission</h3>
-            
-            <div className="bg-gray-50 p-4 rounded-lg mb-4">
-              <p className="text-sm text-gray-600 mb-2">Student: {selectedSubmission.studentId?.name}</p>
-              <p className="text-xs text-gray-500 mb-4">
-                Submitted: {new Date(selectedSubmission.submittedAt).toLocaleString()}
-              </p>
-              <div className="bg-white p-3 rounded border border-gray-200 max-h-60 overflow-y-auto">
-                <pre className="text-sm font-mono whitespace-pre-wrap">{selectedSubmission.code}</pre>
-              </div>
-            </div>
-
-            <form onSubmit={submitGrade}>
-              <div className="mb-4">
-                <label className="block text-gray-700 font-semibold mb-2">Points (out of 100)</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={points}
-                  onChange={(e) => setPoints(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div className="mb-6">
-                <label className="block text-gray-700 font-semibold mb-2">Feedback</label>
-                <textarea
-                  value={feedback}
-                  onChange={(e) => setFeedback(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows="4"
-                  placeholder="Provide constructive feedback..."
-                />
-              </div>
-              <div className="flex space-x-4">
-                <button
-                  type="button"
-                  onClick={() => setShowGrading(false)}
-                  className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Submit Grade
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
+      {/* Student Progress Modal */}
+      {showModal && selectedStudent && (
+        <StudentProgressModal
+          student={selectedStudent}
+          onClose={() => {
+            setShowModal(false)
+            setSelectedStudent(null)
+          }}
+          onUpdate={fetchStudents}
+        />
       )}
     </div>
+  )
+}
+
+const StatsCard = ({ icon, title, value, color, isText }) => {
+  const colors = {
+    blue: 'from-blue-500 to-cyan-500',
+    green: 'from-green-500 to-emerald-500',
+    purple: 'from-purple-500 to-pink-500',
+    yellow: 'from-yellow-500 to-orange-500'
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      whileHover={{ scale: 1.05 }}
+      className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 relative overflow-hidden"
+    >
+      <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${colors[color]} opacity-10 rounded-bl-full`} />
+      <div className={`text-${color}-600 dark:text-${color}-400 mb-3`}>
+        {icon}
+      </div>
+      <h3 className="text-gray-600 dark:text-gray-300 text-sm font-medium mb-1">
+        {title}
+      </h3>
+      <p className={`text-2xl font-bold text-gray-800 dark:text-white ${isText ? 'truncate' : ''}`}>
+        {value}
+      </p>
+    </motion.div>
   )
 }
 
