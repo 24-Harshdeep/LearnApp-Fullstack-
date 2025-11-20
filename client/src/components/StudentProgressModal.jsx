@@ -13,6 +13,15 @@ const StudentProgressModal = ({ student, onClose, onUpdate }) => {
   const [awardReason, setAwardReason] = useState('')
   const [awarding, setAwarding] = useState(false)
   const { updateCoins, updateUser, user: currentUser } = useAuthStore()
+  // Determine whether the logged-in actor is a teacher. Prefer auth store, fallback to persisted lms_user in localStorage.
+  const storedLmsUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('lms_user') || 'null')
+    } catch (e) {
+      return null
+    }
+  })()
+  const isTeacher = (currentUser && currentUser.role === 'teacher') || (storedLmsUser && storedLmsUser.role === 'teacher')
 
   useEffect(() => {
     fetchStudentProgress()
@@ -539,7 +548,7 @@ const StudentProgressModal = ({ student, onClose, onUpdate }) => {
               )}
 
               {/* Award Points Section - only visible to teachers */}
-              {currentUser?.role === 'teacher' && (
+              {isTeacher && (
                 <div className="p-6 bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-900/30 dark:to-pink-900/30 rounded-xl">
                   <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
                     <FiGift className="text-purple-600" />
