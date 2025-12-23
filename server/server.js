@@ -106,6 +106,12 @@ const httpServer = http.createServer(app)
 import { initSocket } from './socket.js'
 initSocket(httpServer)
 
-httpServer.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`)
-})
+// Only start server if not in serverless environment (Vercel)
+if (process.env.VERCEL !== '1') {
+  httpServer.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`)
+  })
+}
+
+// Export for Vercel serverless
+export default app
