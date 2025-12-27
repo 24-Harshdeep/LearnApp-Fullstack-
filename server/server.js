@@ -56,7 +56,20 @@ if (aiInitialized) {
 }
 
 // Middleware
-app.use(cors())
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production' 
+    ? [
+        process.env.FRONTEND_URL,
+        /\.vercel\.app$/,  // Allow all Vercel preview deployments
+        /\.onrender\.com$/  // Allow Render deployments
+      ]
+    : ['http://localhost:5173', 'http://localhost:3000'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}
+
+app.use(cors(corsOptions))
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
