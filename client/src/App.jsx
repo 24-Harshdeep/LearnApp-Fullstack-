@@ -17,7 +17,6 @@ import AIQuiz from './pages/AIQuiz'
 import Profile from './pages/Profile'
 import AICoachChat from './components/AICoachChat'
 import { useAuthStore } from './store/store'
-import AIDebugDuel from './pages/AIDebugDuel'
 // LMS Pages
 import LMSLogin from './pages/LMSLogin'
 import TeacherDashboard from './pages/TeacherDashboard'
@@ -109,7 +108,7 @@ function App() {
           <Route path="tasks" element={<Tasks />} />
           <Route path="social" element={<Social />} />
           <Route path="ai-quiz" element={<AIQuiz />} />
-          <Route path="ai-debug-duel" element={<AIDebugDuel />} />
+          {/* Debug Duel removed */}
           <Route path="leaderboard" element={<Leaderboard />} />
           <Route path="ai-challenges" element={<AIChallenges />} />
           <Route path="progress" element={<Progress />} />

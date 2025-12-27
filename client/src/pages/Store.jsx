@@ -16,16 +16,6 @@ const storeItems = [
     themeId: 'dark'
   },
   {
-    id: 'ocean-theme',
-    name: 'Ocean Theme',
-    icon: '🌊',
-    description: 'Beautiful ocean-inspired colors',
-    cost: 75,
-    type: 'theme',
-    category: 'Themes',
-    themeId: 'ocean'
-  },
-  {
     id: 'ai-voice-pack',
     name: 'AI Voice Pack',
     icon: '🤖',

@@ -114,81 +114,7 @@ export const getAdaptiveDifficulty = async (currentDifficulty, score, totalQuest
 /**
  * Analyze code for bugs
  */
-export const analyzeCode = async (code, language = 'JavaScript', description = '', challengeType = 'Debug') => {
-  try {
-    const response = await api.post('/debug/analyze', {
-      code,
-      language,
-      description,
-      challengeType
-    })
-    return response.data
-  } catch (error) {
-    console.error('Debug Analyze API Error:', error)
-    throw error.response?.data || error
-  }
-}
-
-/**
- * Generate debugging challenge
- */
-export const generateDebugChallenge = async (topic, difficulty = 'medium') => {
-  try {
-    const response = await api.post('/debug/generate-challenge', {
-      topic,
-      difficulty
-    })
-    return response.data
-  } catch (error) {
-    console.error('Debug Challenge Generation API Error:', error)
-    throw error.response?.data || error
-  }
-}
-
-/**
- * Get progressive debugging hint
- */
-export const getDebugHint = async (code, description, hintLevel = 1) => {
-  try {
-    const response = await api.post('/debug/hint', {
-      code,
-      description,
-      hintLevel
-    })
-    return response.data
-  } catch (error) {
-    console.error('Debug Hint API Error:', error)
-    throw error.response?.data || error
-  }
-}
-
-/**
- * Persist a debug attempt
- */
-export const saveDebugAttempt = async (payload) => {
-  try {
-    const response = await api.post('/debug/attempt', payload)
-    return response.data
-  } catch (error) {
-    console.error('Save Debug Attempt Error:', error)
-    throw error.response?.data || error
-  }
-}
-
-/**
- * Get debug attempts for current user (optional filters via query)
- */
-export const getDebugAttempts = async (query = {}) => {
-  try {
-    const params = new URLSearchParams(query).toString()
-    const url = params ? `/debug/attempts?${params}` : '/debug/attempts'
-    const response = await api.get(url)
-    return response.data
-  } catch (error) {
-    console.error('Get Debug Attempts Error:', error)
-    throw error.response?.data || error
-  }
-}
+// Debug Duel APIs removed — feature deprecated
 
 // ==================== ADMIN & STATS API ====================
 
@@ -228,12 +154,7 @@ export default {
   validateQuizAnswer,
   getAdaptiveDifficulty,
   
-  // Debug Duel
-  analyzeCode,
-  generateDebugChallenge,
-  saveDebugAttempt,
-  getDebugAttempts,
-  getDebugHint,
+  // Debug Duel: removed
   
   // Admin
   getAIStats,

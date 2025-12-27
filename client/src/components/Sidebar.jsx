@@ -10,7 +10,7 @@ const studentNavItems = [
   { path: '/tasks', label: 'Tasks', icon: CheckSquare },
   { path: '/social', label: 'Social Arena', icon: Users },
   { path: '/ai-quiz', label: 'AI Quiz', icon: Brain },
-  { path: '/ai-debug-duel', label: 'Debug Duel', icon: Rocket },
+  // Debug Duel removed
   { path: '/leaderboard', label: 'Leaderboard', icon: Trophy },
   // Progress intentionally hidden for students in sidebar
   { path: '/rewards', label: 'Rewards', icon: Award },

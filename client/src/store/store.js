@@ -112,11 +112,11 @@ export const useAppStore = create((set, get) => ({
 export const useThemeStore = create(
   persist(
     (set) => ({
-      theme: 'light', // 'light', 'dark', 'ocean', 'forest', 'sunset', 'minimal', 'matrix', 'neon', 'grey'
+  theme: 'light', // available: 'light', 'pastel', 'lavender', 'mint', 'peach', 'sky', 'minimal', 'dark'
       
       setTheme: (theme) => {
         // Remove all theme classes
-        const themeClasses = ['dark', 'ocean', 'forest', 'sunset', 'minimal', 'matrix', 'neon', 'grey']
+  const themeClasses = ['dark', 'minimal', 'pastel', 'lavender', 'mint', 'peach', 'sky']
         document.documentElement.classList.remove(...themeClasses)
         
         // Add new theme class (except for 'light' which is default)
@@ -129,7 +129,7 @@ export const useThemeStore = create(
       
       toggleDarkMode: () => set((state) => {
         const newTheme = state.theme === 'dark' ? 'light' : 'dark'
-        const themeClasses = ['dark', 'ocean', 'forest', 'sunset', 'minimal', 'matrix', 'neon', 'grey']
+  const themeClasses = ['dark', 'minimal', 'pastel', 'lavender', 'mint', 'peach', 'sky']
         document.documentElement.classList.remove(...themeClasses)
         if (newTheme === 'dark') {
           document.documentElement.classList.add('dark')

@@ -284,20 +284,7 @@ const Social = () => {
               <p className="mb-6 opacity-90">Dynamically generated questions from topics you're studying</p>
               <div className="bg-white/20 backdrop-blur rounded-lg py-3 text-center font-bold">Start AI Quiz →</div>
             </motion.div>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.1 }}
-              className="bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl p-6 shadow-xl text-white cursor-pointer"
-              onClick={() => navigate('/ai-debug-duel')}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <Target className="w-12 h-12 mb-4" />
-              <h3 className="text-2xl font-bold mb-2">AI Debug Duel</h3>
-              <p className="mb-6 opacity-90">AI writes broken code → you fix it. Race against time!</p>
-              <div className="bg-white/20 backdrop-blur rounded-lg py-3 text-center font-bold">Start Debug Duel →</div>
-            </motion.div>
+            {/* Debug Duel card removed */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}

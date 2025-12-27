@@ -34,13 +34,7 @@ const ThemeSwitcher = () => {
   // XP thresholds for theme unlocking
   const xpThresholds = {
     'dark-theme': 100,
-    'ocean-theme': 250,
-    'forest-theme': 250,
-    'sunset-theme': 500,
     'minimal-theme': 100,
-    'matrix-theme': 500,
-    'neon-theme': 500,
-    'grey-theme': 100,
   };
   
   const themes = [
@@ -60,33 +54,7 @@ const ThemeSwitcher = () => {
       price: 50,
       xpRequired: 100,
     },
-    {
-      id: 'ocean',
-      name: 'Oceanic Blue',
-      icon: '🌊',
-      colors: ['#023e8a', '#0077b6', '#00b4d8'],
-      rewardId: 'ocean-theme',
-      price: 75,
-      xpRequired: 250,
-    },
-    {
-      id: 'forest',
-      name: 'Forest Green',
-      icon: '🌲',
-      colors: ['#1b4332', '#2d6a4f', '#52b788'],
-      rewardId: 'forest-theme',
-      price: 75,
-      xpRequired: 250,
-    },
-    {
-      id: 'sunset',
-      name: 'Sunset Glow',
-      icon: '🌅',
-      colors: ['#fb5607', '#ff006e', '#ffbe0b'],
-      rewardId: 'sunset-theme',
-      price: 100,
-      xpRequired: 500,
-    },
+    // Removed Ocean/Forest/Sunset themes per user request
     {
       id: 'minimal',
       name: 'Minimal Light',
@@ -96,33 +64,7 @@ const ThemeSwitcher = () => {
       price: 50,
       xpRequired: 100,
     },
-    {
-      id: 'matrix',
-      name: 'Dark Matrix',
-      icon: '💚',
-      colors: ['#0d1117', '#1a1e26', '#00ff41'],
-      rewardId: 'matrix-theme',
-      price: 100,
-      xpRequired: 500,
-    },
-    {
-      id: 'neon',
-      name: 'Neon Violet',
-      icon: '💜',
-      colors: ['#2b0548', '#5a189a', '#c77dff'],
-      rewardId: 'neon-theme',
-      price: 100,
-      xpRequired: 500,
-    },
-    {
-      id: 'grey',
-      name: 'Classic Grey',
-      icon: '⚫',
-      colors: ['#495057', '#6c757d', '#adb5bd'],
-      rewardId: 'grey-theme',
-      price: 50,
-      xpRequired: 100,
-    },
+    // Removed Matrix/Neon/Grey themes per user request
   ];
 
   const isThemeUnlocked = (themeData) => {

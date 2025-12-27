@@ -13,132 +13,27 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ==================== THEME SYSTEM ==================== */
-
-/* Ocean Theme */
-.ocean {
-  --ocean-primary: #006994;
-  --ocean-secondary: #00b4d8;
-  --ocean-accent: #90e0ef;
-  --ocean-bg: #023e8a;
-  --ocean-surface: #0077b6;
-  --ocean-text: #caf0f8;
+/* Disable removed themes completely (legacy classes neutralized) */
+/* This ensures any leftover 'ocean, forest, sunset, matrix, neon, grey' classes produce no visual change */
+.ocean, .ocean *,
+.forest, .forest *,
+.sunset, .sunset *,
+.matrix, .matrix *,
+.neon, .neon *,
+.grey, .grey * {
+  background: transparent !important;
+  color: inherit !important;
+  border: none !important;
+  box-shadow: none !important;
+  filter: none !important;
 }
 
-.ocean body {
-  background: linear-gradient(135deg, #023e8a 0%, #0077b6 100%);
-  color: var(--ocean-text);
+.ocean body, .forest body, .sunset body, .matrix body, .neon body, .grey body {
+  background: transparent !important;
+  color: inherit !important;
 }
 
-.ocean .bg-white {
-  background: linear-gradient(135deg, rgba(0, 119, 182, 0.9) 0%, rgba(0, 180, 216, 0.8) 100%) !important;
-  backdrop-filter: blur(10px);
-}
 
-.ocean .card, .ocean .bg-white.rounded-xl, .ocean .bg-white.rounded-3xl {
-  background: linear-gradient(135deg, rgba(0, 119, 182, 0.8) 0%, rgba(0, 180, 216, 0.7) 100%) !important;
-  border: 1px solid rgba(144, 224, 239, 0.3);
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-  backdrop-filter: blur(10px);
-}
-
-.ocean .text-gray-900,
-.ocean .text-gray-800,
-.ocean .text-gray-700 {
-  color: var(--ocean-text) !important;
-}
-
-.ocean .bg-gray-100,
-.ocean .bg-gray-200 {
-  background: rgba(0, 180, 216, 0.3) !important;
-}
-
-.ocean .border-gray-200,
-.ocean .border-gray-300 {
-  border-color: rgba(144, 224, 239, 0.3) !important;
-}
-
-.ocean nav {
-  background: linear-gradient(135deg, rgba(2, 62, 138, 0.95) 0%, rgba(0, 119, 182, 0.9) 100%) !important;
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(144, 224, 239, 0.3);
-}
-
-/* Forest Theme */
-.forest {
-  --forest-primary: #1b4332;
-  --forest-secondary: #2d6a4f;
-  --forest-accent: #52b788;
-  --forest-bg: #1b4332;
-  --forest-surface: #2d6a4f;
-  --forest-text: #d8f3dc;
-}
-
-.forest body {
-  background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 100%);
-  color: var(--forest-text);
-}
-
-.forest .bg-white {
-  background: linear-gradient(135deg, rgba(45, 106, 79, 0.9) 0%, rgba(82, 183, 136, 0.8) 100%) !important;
-  backdrop-filter: blur(10px);
-}
-
-.forest .card, .forest .bg-white.rounded-xl, .forest .bg-white.rounded-3xl {
-  background: linear-gradient(135deg, rgba(45, 106, 79, 0.8) 0%, rgba(82, 183, 136, 0.7) 100%) !important;
-  border: 1px solid rgba(82, 183, 136, 0.3);
-  backdrop-filter: blur(10px);
-}
-
-.forest .text-gray-900,
-.forest .text-gray-800,
-.forest .text-gray-700 {
-  color: var(--forest-text) !important;
-}
-
-.forest nav {
-  background: linear-gradient(135deg, rgba(27, 67, 50, 0.95) 0%, rgba(45, 106, 79, 0.9) 100%) !important;
-  backdrop-filter: blur(10px);
-}
-
-/* Sunset Theme */
-.sunset {
-  --sunset-primary: #fb5607;
-  --sunset-secondary: #ff006e;
-  --sunset-accent: #ffbe0b;
-  --sunset-bg: #d62828;
-  --sunset-surface: #fb5607;
-  --sunset-text: #fff3e0;
-}
-
-.sunset body {
-  background: linear-gradient(135deg, #d62828 0%, #fb5607 50%, #ff006e 100%);
-  color: var(--sunset-text);
-}
-
-.sunset .bg-white {
-  background: linear-gradient(135deg, rgba(251, 86, 7, 0.9) 0%, rgba(255, 0, 110, 0.8) 100%) !important;
-  backdrop-filter: blur(10px);
-}
-
-.sunset .card, .sunset .bg-white.rounded-xl, .sunset .bg-white.rounded-3xl {
-  background: linear-gradient(135deg, rgba(251, 86, 7, 0.8) 0%, rgba(255, 0, 110, 0.7) 100%) !important;
-  border: 1px solid rgba(255, 190, 11, 0.3);
-  backdrop-filter: blur(10px);
-}
-
-.sunset .text-gray-900,
-.sunset .text-gray-800,
-.sunset .text-gray-700 {
-  color: var(--sunset-text) !important;
-}
-
-.sunset nav {
-  background: linear-gradient(135deg, rgba(214, 40, 40, 0.95) 0%, rgba(251, 86, 7, 0.9) 100%) !important;
-  backdrop-filter: blur(10px);
-}
-
-/* Minimal Theme */
 .minimal {
   --minimal-bg: #f8f9fa;
   --minimal-surface: #e9ecef;
@@ -166,60 +61,11 @@
   border-bottom: 1px solid #e9ecef;
 }
 
-/* Matrix Theme */
-.matrix {
-  --matrix-primary: #00ff41;
-  --matrix-bg: #0d1117;
-  --matrix-surface: #1a1e26;
-  --matrix-text: #00ff41;
-}
+/* Matrix theme removed */
 
-.matrix body {
-  background: #0d1117;
-  color: var(--matrix-text);
-}
-
-.matrix .bg-white {
-  background: rgba(26, 30, 38, 0.95) !important;
-  border: 1px solid rgba(0, 255, 65, 0.3);
-  backdrop-filter: blur(10px);
-}
-
-.matrix .card, .matrix .bg-white.rounded-xl, .matrix .bg-white.rounded-3xl {
-  background: rgba(26, 30, 38, 0.9) !important;
-  border: 1px solid rgba(0, 255, 65, 0.3);
-  box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
-}
-
-.matrix .text-gray-900,
-.matrix .text-gray-800,
-.matrix .text-gray-700 {
-  color: var(--matrix-text) !important;
-}
-
-.matrix nav {
-  background: rgba(13, 17, 23, 0.98) !important;
-  border-bottom: 1px solid rgba(0, 255, 65, 0.3);
-}
-
-/* Neon Theme */
-.neon {
-  --neon-primary: #5a189a;
-  --neon-secondary: #9d4edd;
-  --neon-accent: #c77dff;
-  --neon-bg: #2b0548;
-  --neon-text: #e0aaff;
-}
-
-.neon body {
-  background: linear-gradient(135deg, #2b0548 0%, #5a189a 100%);
-  color: var(--neon-text);
-}
-
-.neon .bg-white {
-  background: linear-gradient(135deg, rgba(90, 24, 154, 0.9) 0%, rgba(157, 78, 221, 0.8) 100%) !important;
-  backdrop-filter: blur(10px);
-}
+/* Neon theme removed */
+  /* backdrop-filter: blur(10px);
+} */
 
 .neon .card, .neon .bg-white.rounded-xl, .neon .bg-white.rounded-3xl {
   background: linear-gradient(135deg, rgba(90, 24, 154, 0.8) 0%, rgba(157, 78, 221, 0.7) 100%) !important;

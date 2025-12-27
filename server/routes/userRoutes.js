@@ -159,7 +159,8 @@ router.post('/award-xp', async (req, res) => {
   try {
     const { email, xpToAdd, reason } = req.body
     
-    if (!email || !xpToAdd) {
+    // Accept xpToAdd === 0. Only reject when xpToAdd is undefined/null or email missing.
+    if (!email || typeof xpToAdd === 'undefined' || xpToAdd === null) {
       return res.status(400).json({ message: 'Email and xpToAdd are required' })
     }
 
@@ -171,18 +172,19 @@ router.post('/award-xp', async (req, res) => {
     }
 
     const oldXP = user.xp || 0
-    user.xp = (user.xp || 0) + xpToAdd
+    const xpNumber = Number(xpToAdd) || 0
+    user.xp = (user.xp || 0) + xpNumber
     user.calculateLevel()
     await user.save()
 
-    console.log(`🎁 XP awarded: ${email} earned +${xpToAdd} XP (${oldXP} → ${user.xp}) - Reason: ${reason || 'N/A'}`)
+    console.log(`🎁 XP awarded: ${email} earned +${xpNumber} XP (${oldXP} → ${user.xp}) - Reason: ${reason || 'N/A'}`)
 
     res.json({ 
       success: true,
       xp: user.xp, 
       level: user.level,
-      xpAdded: xpToAdd,
-      message: `+${xpToAdd} XP earned!`
+      xpAdded: xpNumber,
+      message: `+${xpNumber} XP earned!`
     })
   } catch (error) {
     console.error('XP award error:', error)

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import axios from 'axios'
+import api, { BACKEND_ORIGIN } from '../services/api'
 import toast from 'react-hot-toast'
 import { 
   Calendar, 
@@ -17,7 +17,8 @@ import {
   Clock
 } from 'lucide-react'
 
-const API_URL = 'http://localhost:5000/api'
+// Use shared api instance (interceptor attaches Authorization)
+const API_URL = BACKEND_ORIGIN + '/api'
 
 export default function TeacherHackathon() {
   const [activeTab, setActiveTab] = useState('create') // 'create', 'manage', 'teams', 'submissions'
@@ -108,12 +109,7 @@ export default function TeacherHackathon() {
         return
       }
       
-      const response = await axios.get(`${API_URL}/hackathons`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
+      const response = await api.get('/hackathons', { headers: { 'Content-Type': 'application/json' } })
       setHackathons(response.data.hackathons || [])
     } catch (error) {
       console.error('Error fetching hackathons:', error)
@@ -126,9 +122,7 @@ export default function TeacherHackathon() {
   const viewAllTeams = async (hackathon) => {
     try {
       const token = localStorage.getItem('lms_token') || localStorage.getItem('token')
-      const resp = await axios.get(`${API_URL}/hackathons/${hackathon._id}`, {
-        headers: { Authorization: token ? `Bearer ${token}` : '' }
-      })
+      const resp = await api.get(`/hackathons/${hackathon._id}`)
       const full = resp.data.hackathon || hackathon
       setSelectedHackathon(full)
       setAllTeams(full.teams || [])
@@ -222,16 +216,9 @@ export default function TeacherHackathon() {
 
       console.log('📤 Submitting hackathon with token:', token ? 'Token exists' : 'No token')
 
-      const response = await axios.post(
-        `${API_URL}/hackathons/create`,
-        submitFormData,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data'
-          }
-        }
-      )
+      const response = await api.post('/hackathons/create', submitFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
 
       if (response.data.success) {
         toast.success('Hackathon created successfully! 🎉')
@@ -270,19 +257,11 @@ export default function TeacherHackathon() {
   const viewSubmissions = async (hackathon) => {
     try {
       const token = localStorage.getItem('lms_token') || localStorage.getItem('token')
-      const response = await axios.get(
-        `${API_URL}/hackathons/${hackathon._id}/submissions`,
-        {
-          headers: { 
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      )
+      const response = await api.get(`/hackathons/${hackathon._id}/submissions`)
       // also fetch full hackathon details so teams have populated member info
       let fullHackathon = hackathon
       try {
-        const det = await axios.get(`${API_URL}/hackathons/${hackathon._id}`, { headers: { Authorization: `Bearer ${token}` } })
+  const det = await api.get(`/hackathons/${hackathon._id}`)
         fullHackathon = det.data.hackathon || hackathon
       } catch (err) {
         console.warn('Failed to fetch full hackathon details, continuing with shallow data')
@@ -301,16 +280,7 @@ export default function TeacherHackathon() {
   const gradeSubmission = async (hackathonId, teamId, score, feedback) => {
     try {
       const token = localStorage.getItem('lms_token') || localStorage.getItem('token')
-      await axios.post(
-        `${API_URL}/hackathons/${hackathonId}/team/${teamId}/grade`,
-        { score, feedback },
-        {
-          headers: { 
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      )
+      await api.post(`/hackathons/${hackathonId}/team/${teamId}/grade`, { score, feedback })
       toast.success('Graded successfully!')
       viewSubmissions(selectedHackathon)
     } catch (error) {
